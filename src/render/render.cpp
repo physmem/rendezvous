@@ -21,7 +21,7 @@ bool rv::dx11_renderer::init() noexcept
 		D3D11_INPUT_ELEMENT_DESC{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, col), D3D11_INPUT_PER_VERTEX_DATA, 0}
 	};
 
-	if (FAILED(device_->CreateInputLayout(layout.data(), layout.size(), d3d11_vertex_shader.data(), d3d11_vertex_shader.size(), input_layout_.release_and_get())))
+	if (FAILED(device_->CreateInputLayout(layout.data(), layout.size(), d3d11_vertex_shader.data(), static_cast<cstd::uint32_t>(d3d11_vertex_shader.size()), input_layout_.release_and_get())))
 	{
 		return false;
 	}
@@ -52,4 +52,55 @@ bool rv::dx11_renderer::init() noexcept
 	render_target.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
 	return SUCCEEDED(device_->CreateBlendState(&blend_desc, blend_state_.release_and_get()));
+}
+
+void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcept
+{
+	D3D11_VIEWPORT viewport = { };
+
+	viewport.Width = display_size.x;
+	viewport.Height = display_size.y;
+	viewport.MinDepth = 0.f;
+	viewport.MaxDepth = 1.f;
+
+	context_->RSSetViewports(1, &viewport);
+	context_->IASetInputLayout(input_layout_.value());
+
+	context_->VSSetShader(vertex_shader_.value(), nullptr, 0);
+	context_->PSSetShader(pixel_shader_.value(), nullptr, 0);
+	context_->GSSetShader(nullptr, nullptr, 0);
+	context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+
+	constexpr array_t<float, 4> blend_factor = { };
+
+	context_->OMSetBlendState(blend_state_.value(), blend_factor.data(), 0xffffffff);
+
+	display_size_ = display_size;
+}
+
+void rv::dx11_renderer::end_frame() noexcept
+{
+			
+}
+
+void rv::dx11_renderer::draw_vertices(const span_t<const vertex> vertices) noexcept
+{
+	D3D11_MAPPED_SUBRESOURCE resource = { };
+
+	if (FAILED(context_->Map(buffer_.value(), 0, D3D11_MAP_WRITE_DISCARD, 0, &resource)))
+	{
+		return;
+	}
+
+	cstd::memcpy(resource.pData, vertices.data(), vertices.size() * sizeof(vertex));
+
+	context_->Unmap(buffer_.value(), 0);
+
+	constexpr cstd::uint32_t strides = sizeof(vertex);
+	constexpr cstd::uint32_t offsets = 0;
+
+	ID3D11Buffer* buffer = buffer_.value();
+
+	context_->IASetVertexBuffers(0, 1, &buffer, &strides, &offsets);
+	context_->Draw(static_cast<cstd::int32_t>(vertices.size()), 0);
 }

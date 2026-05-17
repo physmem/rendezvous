@@ -9,9 +9,15 @@ namespace rv
 		float r, g, b, a;
 	};
 
-	struct position
+	template <class T>
+	struct vector_2d
 	{
-		float x, y;
+		T x, y;
+	};
+
+	struct position : vector_2d<float>
+	{
+		
 	};
 
 	struct vertex
@@ -24,9 +30,24 @@ namespace rv
 	{
 	public:
 		virtual bool init() noexcept = 0;
+		virtual void begin_frame(vector_2d<float> display_size) noexcept = 0;
+		virtual void end_frame() noexcept = 0;
+
+		virtual void draw_vertices(span_t<const vertex> vertices) noexcept = 0;
+
+		void draw_rect(position min, position max, color col) noexcept;
 
 	protected:
+		vector_2d<float> display_size_ = { };
 
+		[[nodiscard]] vector_2d<float> to_ndc(const position pos) const
+		{
+			return
+			{
+				.x = 2.f * (pos.x - 0.5f) / display_size_.x - 1.f,
+				.y = 1.f - 2.f * (pos.y - 0.5f) / display_size_.y
+			};
+		}
 	};
 
 	template <class T>
@@ -59,7 +80,12 @@ namespace rv
 			return *this;
 		}
 
-		T* operator->() const noexcept
+		[[nodiscard]] T* value() const noexcept
+		{
+			return value_;
+		}
+
+		[[nodiscard]] T* operator->() const noexcept
 		{
 			return value_;
 		}
@@ -98,6 +124,10 @@ namespace rv
 					context_(context) { }
 
 		bool init() noexcept override;
+		void begin_frame(vector_2d<float> display_size) noexcept override;
+		void end_frame() noexcept override;
+
+		void draw_vertices(span_t<const vertex> vertices) noexcept override;
 
 	protected:
 		constexpr static cstd::size_t buffer_vertex_count = 8;

@@ -19,6 +19,11 @@ namespace cstd
 	typedef unsigned long long uint64_t;
 
 	typedef unsigned long long size_t;
+
+	inline void memcpy(void* destination, const void* source, size_t size)
+	{
+		std::memcpy(destination, source, size);
+	}
 }
 
 template <class T, cstd::size_t Count>

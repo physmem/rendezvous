@@ -34,7 +34,8 @@ namespace rv
 		virtual void end_frame() noexcept = 0;
 
 		void draw_vertices(span_t<const vertex> vertices) noexcept;
-		void draw_rect(position min, position max, color col) noexcept;
+		void draw_rect(position min, position max, color col, float thickness = 1.f) noexcept;
+		void draw_rect_filled(position min, position max, color col) noexcept;
 
 	protected:
 		virtual void flush_pending_vertices() noexcept = 0;

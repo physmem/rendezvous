@@ -7,7 +7,15 @@ void rv::renderer::draw_vertices(const span_t<const vertex> vertices) noexcept
 	pending_vertices_.insert(pending_vertices_.end(), vertices.begin(), vertices.end());
 }
 
-void rv::renderer::draw_rect(const position min, const position max, const color col) noexcept
+void rv::renderer::draw_rect(const position min, const position max, const color col, const float thickness) noexcept
+{
+	draw_rect_filled(min, { max.x, min.y + thickness }, col);
+	draw_rect_filled({ min.x, max.y - thickness }, max, col);
+	draw_rect_filled(min, { min.x + thickness, max.y }, col);
+	draw_rect_filled({ max.x - thickness, min.y }, max, col);
+}
+
+void rv::renderer::draw_rect_filled(const position min, const position max, const color col) noexcept
 {
 	const auto [x0, y0] = to_ndc(min);
 	const auto [x1, y1] = to_ndc(max);
@@ -17,16 +25,15 @@ void rv::renderer::draw_rect(const position min, const position max, const color
 			return vertex{ .pos = { x, y }, .col = col };
 		};
 
-	const array_t<vertex, 8> vertices =
+	const array_t<vertex, 6> vertices =
 	{
-		make_vertex(x0, y0), make_vertex(x1, y0),
-		make_vertex(x1, y0), make_vertex(x1, y1),
-		make_vertex(x1, y1), make_vertex(x0, y1),
-		make_vertex(x0, y1), make_vertex(x0, y0),
+		make_vertex(x0, y0), make_vertex(x1, y0), make_vertex(x0, y1),
+		make_vertex(x1, y0), make_vertex(x1, y1), make_vertex(x0, y1),
 	};
 
 	draw_vertices(vertices);
 }
+
 
 rv::vector_2d<float> rv::renderer::to_ndc(const position pos) const
 {
@@ -123,7 +130,7 @@ void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcep
 	context_->VSSetShader(vertex_shader_.value(), nullptr, 0);
 	context_->PSSetShader(pixel_shader_.value(), nullptr, 0);
 	context_->GSSetShader(nullptr, nullptr, 0);
-	context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_LINELIST);
+	context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
 	constexpr array_t<float, 4> blend_factor = { };
 

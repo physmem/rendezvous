@@ -51,7 +51,7 @@ bool rv::dx11_renderer::init() noexcept
 		D3D11_INPUT_ELEMENT_DESC{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, col), D3D11_INPUT_PER_VERTEX_DATA, 0}
 	};
 
-	if (FAILED(device_->CreateInputLayout(layout.data(), layout.size(), d3d11_vertex_shader.data(), static_cast<cstd::uint32_t>(d3d11_vertex_shader.size()), input_layout_.release_and_get())))
+	if (FAILED(device_->CreateInputLayout(layout.data(), static_cast<cstd::uint32_t>(layout.size()), d3d11_vertex_shader.data(), d3d11_vertex_shader.size(), input_layout_.release_and_get())))
 	{
 		return false;
 	}

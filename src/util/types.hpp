@@ -19,11 +19,6 @@ namespace cstd
 	typedef unsigned long long uint64_t;
 
 	typedef unsigned long long size_t;
-
-	inline void memcpy(void* destination, const void* source, size_t size)
-	{
-		std::memcpy(destination, source, size);
-	}
 }
 
 template <class T, cstd::size_t Count>
@@ -46,3 +41,17 @@ using wstring_t = std::wstring;
 
 using string_view_t = std::string_view;
 using wstring_view_t = std::wstring_view;
+
+namespace cstd
+{
+	inline void memcpy(void* destination, const void* source, size_t size)
+	{
+		std::memcpy(destination, source, size);
+	}
+
+	template <class T, class ...Args>
+	unique_ptr_t<T> make_unique(Args&&... args)
+	{
+		return std::make_unique<T>(std::forward<Args>(args)...);
+	}
+}

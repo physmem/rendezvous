@@ -33,14 +33,18 @@ namespace rv
 		virtual void begin_frame(vector_2d<float> display_size) noexcept = 0;
 		virtual void end_frame() noexcept = 0;
 
-		virtual void draw_vertices(span_t<const vertex> vertices) noexcept = 0;
-
+		void draw_vertices(span_t<const vertex> vertices) noexcept;
 		void draw_rect(position min, position max, color col) noexcept;
 
 	protected:
+		virtual void flush_pending_vertices() noexcept = 0;
+
 		[[nodiscard]] vector_2d<float> to_ndc(position pos) const;
 
 		vector_2d<float> display_size_ = { };
+		vector_t<vertex> pending_vertices_ = { };
+
+		cstd::size_t buffer_vertex_count_ = 0;
 	};
 
 	template <class T>
@@ -120,10 +124,11 @@ namespace rv
 		void begin_frame(vector_2d<float> display_size) noexcept override;
 		void end_frame() noexcept override;
 
-		void draw_vertices(span_t<const vertex> vertices) noexcept override;
-
 	protected:
-		constexpr static cstd::size_t buffer_vertex_count = 8;
+		bool create_buffer(cstd::size_t vertex_count);
+		bool try_widen_buffer();
+
+		void flush_pending_vertices() noexcept override;
 
 		ID3D11Device* device_;
 		ID3D11DeviceContext* context_;

@@ -2,6 +2,11 @@
 #include "shaders.hpp"
 #include "../util/types.hpp"
 
+void rv::renderer::draw_vertices(const span_t<const vertex> vertices) noexcept
+{
+	pending_vertices_.insert(pending_vertices_.end(), vertices.begin(), vertices.end());
+}
+
 void rv::renderer::draw_rect(const position min, const position max, const color col) noexcept
 {
 	const auto [x0, y0] = to_ndc(min);
@@ -56,18 +61,6 @@ bool rv::dx11_renderer::init() noexcept
 		return false;
 	}
 
-	D3D11_BUFFER_DESC buffer_desc = { };
-
-	buffer_desc.ByteWidth = sizeof(vertex) * buffer_vertex_count;
-	buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
-	buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
-	buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
-
-	if (FAILED(device_->CreateBuffer(&buffer_desc, nullptr, buffer_.release_and_get())))
-	{
-		return false;
-	}
-
 	D3D11_BLEND_DESC blend_desc = { };
 
 	auto& render_target = blend_desc.RenderTarget[0];
@@ -82,6 +75,37 @@ bool rv::dx11_renderer::init() noexcept
 	render_target.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
 	return SUCCEEDED(device_->CreateBlendState(&blend_desc, blend_state_.release_and_get()));
+}
+
+bool rv::dx11_renderer::create_buffer(const cstd::size_t vertex_count)
+{
+	D3D11_BUFFER_DESC buffer_desc = { };
+
+	buffer_desc.ByteWidth = sizeof(vertex) * static_cast<cstd::uint32_t>(vertex_count);
+	buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
+	buffer_desc.BindFlags = D3D11_BIND_VERTEX_BUFFER;
+	buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	if (FAILED(device_->CreateBuffer(&buffer_desc, nullptr, buffer_.release_and_get())))
+	{
+		return false;
+	}
+
+	buffer_vertex_count_ = vertex_count;
+
+	return true;
+}
+
+bool rv::dx11_renderer::try_widen_buffer()
+{
+	if (pending_vertices_.size() <= buffer_vertex_count_)
+	{
+		return true;
+	}
+
+	constexpr cstd::size_t additional_vertices = 256;
+
+	return create_buffer(pending_vertices_.size() + additional_vertices);
 }
 
 void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcept
@@ -110,19 +134,26 @@ void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcep
 
 void rv::dx11_renderer::end_frame() noexcept
 {
-			
+	flush_pending_vertices();
 }
 
-void rv::dx11_renderer::draw_vertices(const span_t<const vertex> vertices) noexcept
+void rv::dx11_renderer::flush_pending_vertices() noexcept
 {
-	D3D11_MAPPED_SUBRESOURCE resource = { };
-
-	if (FAILED(context_->Map(buffer_.value(), 0, D3D11_MAP_WRITE_DISCARD, 0, &resource)))
+	if (pending_vertices_.empty())
 	{
 		return;
 	}
 
-	cstd::memcpy(resource.pData, vertices.data(), vertices.size() * sizeof(vertex));
+	D3D11_MAPPED_SUBRESOURCE resource = { };
+
+	if (!try_widen_buffer() || FAILED(context_->Map(buffer_.value(), 0, D3D11_MAP_WRITE_DISCARD, 0, &resource)))
+	{
+		pending_vertices_.clear();
+
+		return;
+	}
+
+	cstd::memcpy(resource.pData, pending_vertices_.data(), pending_vertices_.size() * sizeof(vertex));
 
 	context_->Unmap(buffer_.value(), 0);
 
@@ -132,5 +163,7 @@ void rv::dx11_renderer::draw_vertices(const span_t<const vertex> vertices) noexc
 	ID3D11Buffer* buffer = buffer_.value();
 
 	context_->IASetVertexBuffers(0, 1, &buffer, &strides, &offsets);
-	context_->Draw(static_cast<cstd::int32_t>(vertices.size()), 0);
+	context_->Draw(static_cast<cstd::int32_t>(pending_vertices_.size()), 0);
+
+	pending_vertices_.clear();
 }

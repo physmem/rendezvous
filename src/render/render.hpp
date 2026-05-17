@@ -38,16 +38,9 @@ namespace rv
 		void draw_rect(position min, position max, color col) noexcept;
 
 	protected:
-		vector_2d<float> display_size_ = { };
+		[[nodiscard]] vector_2d<float> to_ndc(position pos) const;
 
-		[[nodiscard]] vector_2d<float> to_ndc(const position pos) const
-		{
-			return
-			{
-				.x = 2.f * (pos.x - 0.5f) / display_size_.x - 1.f,
-				.y = 1.f - 2.f * (pos.y - 0.5f) / display_size_.y
-			};
-		}
+		vector_2d<float> display_size_ = { };
 	};
 
 	template <class T>

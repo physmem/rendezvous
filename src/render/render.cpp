@@ -23,6 +23,15 @@ void rv::renderer::draw_rect(const position min, const position max, const color
 	draw_vertices(vertices);
 }
 
+rv::vector_2d<float> rv::renderer::to_ndc(const position pos) const
+{
+	return
+	{
+		.x = 2.f * (pos.x - 0.5f) / display_size_.x - 1.f,
+		.y = 1.f - 2.f * (pos.y - 0.5f) / display_size_.y
+	};
+}
+
 bool rv::dx11_renderer::init() noexcept
 {
 	if (!device_ || !context_)

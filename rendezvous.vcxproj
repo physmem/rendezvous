@@ -151,6 +151,7 @@
   <ItemGroup>
     <ClInclude Include="src\log\log.hpp" />
     <ClInclude Include="src\render\render.hpp" />
+    <ClInclude Include="src\render\shaders.hpp" />
     <ClInclude Include="src\util\types.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

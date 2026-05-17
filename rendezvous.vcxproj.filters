@@ -35,5 +35,8 @@
     <ClInclude Include="src\util\types.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\render\shaders.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

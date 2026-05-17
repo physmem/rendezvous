@@ -2,6 +2,27 @@
 #include "shaders.hpp"
 #include "../util/types.hpp"
 
+void rv::renderer::draw_rect(const position min, const position max, const color col) noexcept
+{
+	const auto [x0, y0] = to_ndc(min);
+	const auto [x1, y1] = to_ndc(max);
+
+	const auto make_vertex = [col](const float x, const float y) -> vertex
+		{
+			return vertex{ .pos = { x, y }, .col = col };
+		};
+
+	const array_t<vertex, 8> vertices =
+	{
+		make_vertex(x0, y0), make_vertex(x1, y0),
+		make_vertex(x1, y0), make_vertex(x1, y1),
+		make_vertex(x1, y1), make_vertex(x0, y1),
+		make_vertex(x0, y1), make_vertex(x0, y0),
+	};
+
+	draw_vertices(vertices);
+}
+
 bool rv::dx11_renderer::init() noexcept
 {
 	if (!device_ || !context_)

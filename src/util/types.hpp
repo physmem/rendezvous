@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <cmath>
 #include <array>
 #include <span>
 
@@ -47,6 +48,11 @@ namespace cstd
 	inline void memcpy(void* destination, const void* source, size_t size)
 	{
 		std::memcpy(destination, source, size);
+	}
+
+	inline float sqrtf(const float x)
+	{
+		return std::sqrtf(x);
 	}
 
 	template <class T, class ...Args>

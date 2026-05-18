@@ -13,6 +13,13 @@ void rv::renderer::draw_rect(const position min, const position max, const color
 	draw_rect_filled({ min.x, max.y - thickness }, max, col);
 	draw_rect_filled(min, { min.x + thickness, max.y }, col);
 	draw_rect_filled({ max.x - thickness, min.y }, max, col);
+
+	/*add_path_point(max);
+	add_path_point({ max.x, min.y });
+	add_path_point(min);
+	add_path_point({ min.x, max.y });
+
+	draw_lined_path(col, thickness);*/
 }
 
 void rv::renderer::draw_rect_filled(const position min, const position max, const color col) noexcept
@@ -34,13 +41,117 @@ void rv::renderer::draw_rect_filled(const position min, const position max, cons
 	draw_vertices(vertices);
 }
 
+void rv::renderer::draw_line(const position a, const position b, const color col, const float thickness) noexcept
+{
+	const ndc_position ndc_a = to_ndc(a);
+	const ndc_position ndc_b = to_ndc(b);
 
-rv::vector_2d<float> rv::renderer::to_ndc(const position pos) const
+	return draw_line_ndc(ndc_a, ndc_b, col, thickness);
+}
+
+void rv::renderer::add_path_point(const position pos)
+{
+	path_points_.push_back(to_ndc(pos));
+}
+
+void rv::renderer::draw_lined_path(const color col, const float thickness, const bool closed)
+{
+	if (path_points_.size() <= 1)
+	{
+		path_points_.clear();
+
+		return;
+	}
+
+	for (cstd::size_t i = 0; i < path_points_.size() - 1; i++)
+	{
+		const ndc_position point = path_points_[i];
+		const ndc_position next_point = path_points_[i + 1];
+
+		draw_line_ndc(point, next_point, col, thickness);
+	}
+
+	if (closed)
+	{
+		const ndc_position first_point = path_points_.front();
+		const ndc_position last_point = path_points_.back();
+
+		draw_line_ndc(first_point, last_point, col, thickness);
+	}
+
+	path_points_.clear();
+}
+
+void rv::renderer::draw_filled_path(const color col)
+{
+	if (path_points_.size() <= 1)
+	{
+		path_points_.clear();
+
+		return;
+	}
+
+	const ndc_position first_point = path_points_[0];
+
+	for (cstd::size_t i = 1; i < path_points_.size() - 1; i++)
+	{
+		const ndc_position point = path_points_[i];
+		const ndc_position next_point = path_points_[i + 1];
+
+		const array_t<vertex, 3> vertices =
+		{
+			vertex{ .pos = first_point, .col = col },
+			vertex{ .pos = point, .col = col },
+			vertex{ .pos = next_point, .col = col },
+		};
+
+		draw_vertices(vertices);
+	}
+
+	path_points_.clear();
+}
+
+void rv::renderer::draw_line_ndc(const ndc_position a, const ndc_position b, const color col, const float thickness) noexcept
+{
+	const float lx = b.x - a.x;
+	const float ly = b.y - a.y;
+
+	const float len = cstd::sqrtf(lx * lx + ly * ly);
+
+	if (len < 0.0001f)
+	{
+		return;
+	}
+
+	const float thick_len = len * thickness * 0.5f;
+
+	const float nx = -ly / thick_len * (2.f / display_size_.x);
+	const float ny = lx / thick_len * (2.f / display_size_.y);
+
+	const auto make_vertex = [col](const float x, const float y) -> vertex
+		{
+			return vertex{ .pos = { x, y }, .col = col };
+		};
+
+	const array_t<vertex, 6> vertices =
+	{
+		make_vertex(a.x + nx, a.y + ny),
+		make_vertex(b.x + nx, b.y + ny),
+		make_vertex(a.x - nx, a.y - ny),
+		make_vertex(b.x + nx, b.y + ny),
+		make_vertex(b.x - nx, b.y - ny),
+		make_vertex(a.x - nx, a.y - ny),
+	};
+
+	draw_vertices(vertices);
+}
+
+rv::ndc_position rv::renderer::to_ndc(const position pos) const noexcept
 {
 	return
 	{
-		.x = 2.f * (pos.x - 0.5f) / display_size_.x - 1.f,
-		.y = 1.f - 2.f * (pos.y - 0.5f) / display_size_.y
+		2.f * (pos.x - 0.5f) / display_size_.x - 1.f,
+		1.f - 2.f * (pos.y - 0.5f) / display_size_.y
 	};
 }
 

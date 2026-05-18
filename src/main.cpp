@@ -92,6 +92,8 @@ cstd::int32_t main()
 		renderer->draw_rect_filled({ 100.f, 100.f }, { 300.f, 250.f }, { 1.f, 0.f, 0.f, 1.f });
 		renderer->draw_rect({ 400.f, 100.f }, { 600.f, 250.f }, { 0.f, 1.f, 0.f, 1.f }, 5.f);
 		renderer->draw_rect({ 100.f, 300.f }, { 300.f, 450.f }, { 1.f, 1.f, 1.f, 1.f });
+		renderer->draw_line({ 100.f, 100.f }, { 105.f, 105.f }, { 0.f, 1.f, 0.f, 1.f }, 2.f);
+
 
 		renderer->end_frame();
 

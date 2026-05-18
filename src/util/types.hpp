@@ -66,6 +66,16 @@ namespace cstd
 		return std::sinf(x);
 	}
 
+	inline float fminf(const float x, const float y)
+	{
+		return std::fminf(x, y);
+	}
+
+	inline float fmaxf(const float x, const float y)
+	{
+		return std::fmaxf(x, y);
+	}
+
 	template <class T, class ...Args>
 	unique_ptr_t<T> make_unique(Args&&... args)
 	{

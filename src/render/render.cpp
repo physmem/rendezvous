@@ -7,38 +7,63 @@ void rv::renderer::draw_vertices(const span_t<const vertex> vertices) noexcept
 	pending_vertices_.insert(pending_vertices_.end(), vertices.begin(), vertices.end());
 }
 
-void rv::renderer::draw_rect(const position min, const position max, const color col, const float thickness) noexcept
+void rv::renderer::draw_rect(const position min, const position max, const color col, const float thickness, const float rounding) noexcept
 {
-	draw_rect_filled(min, { max.x, min.y + thickness }, col);
-	draw_rect_filled({ min.x, max.y - thickness }, max, col);
-	draw_rect_filled(min, { min.x + thickness, max.y }, col);
-	draw_rect_filled({ max.x - thickness, min.y }, max, col);
+	if (rounding < 0.5f)
+	{
+		draw_rect_filled(min, { max.x, min.y + thickness }, col);
+		draw_rect_filled({ min.x, max.y - thickness }, max, col);
+		draw_rect_filled(min, { min.x + thickness, max.y }, col);
+		draw_rect_filled({ max.x - thickness, min.y }, max, col);
 
-	/*add_path_point(max);
-	add_path_point({ max.x, min.y });
-	add_path_point(min);
-	add_path_point({ min.x, max.y });
+		return;
+	}
 
-	draw_lined_path(col, thickness);*/
+	const float r = rounding;
+
+	constexpr float pi = cstd::numbers::pi_f;
+
+	add_arc_path({ min.x + r, min.y + r }, r, pi, pi * 1.5f);
+	add_arc_path({ max.x - r, min.y + r }, r, pi * 1.5f, pi * 2.f);
+	add_arc_path({ max.x - r, max.y - r }, r, 0.f, pi * 0.5f);
+	add_arc_path({ min.x + r, max.y - r }, r, pi * 0.5f, pi);
+
+	draw_lined_path(col, thickness, true);
 }
 
-void rv::renderer::draw_rect_filled(const position min, const position max, const color col) noexcept
+void rv::renderer::draw_rect_filled(const position min, const position max, const color col, const float rounding) noexcept
 {
-	const auto [x0, y0] = to_ndc(min);
-	const auto [x1, y1] = to_ndc(max);
+	if (rounding < 0.5f)
+	{
+		const auto [x0, y0] = to_ndc(min);
+		const auto [x1, y1] = to_ndc(max);
 
-	const auto make_vertex = [col](const float x, const float y) -> vertex
+		const auto make_vertex = [col](const float x, const float y) -> vertex
+			{
+				return vertex{ .pos = { x, y }, .col = col };
+			};
+
+		const array_t<vertex, 6> vertices =
 		{
-			return vertex{ .pos = { x, y }, .col = col };
+			make_vertex(x0, y0), make_vertex(x1, y0), make_vertex(x0, y1),
+			make_vertex(x1, y0), make_vertex(x1, y1), make_vertex(x0, y1),
 		};
 
-	const array_t<vertex, 6> vertices =
-	{
-		make_vertex(x0, y0), make_vertex(x1, y0), make_vertex(x0, y1),
-		make_vertex(x1, y0), make_vertex(x1, y1), make_vertex(x0, y1),
-	};
+		draw_vertices(vertices);
 
-	draw_vertices(vertices);
+		return;
+	}
+
+	constexpr float pi = cstd::numbers::pi_f;
+
+	const float r = rounding;
+
+	add_arc_path({ min.x + r, min.y + r }, r, pi, pi * 1.5f);
+	add_arc_path({ max.x - r, min.y + r }, r, pi * 1.5f, pi * 2.f);
+	add_arc_path({ max.x - r, max.y - r }, r, 0.f, pi * 0.5f);
+	add_arc_path({ min.x + r, max.y - r }, r, pi * 0.5f, pi);
+
+	draw_filled_path(col);
 }
 
 void rv::renderer::draw_line(const position a, const position b, const color col, const float thickness) noexcept
@@ -139,10 +164,8 @@ void rv::renderer::draw_line_ndc(const ndc_position a, const ndc_position b, con
 		return;
 	}
 
-	const float thick_len = len * thickness * 0.5f;
-
-	const float nx = -ly / thick_len * (2.f / display_size_.x);
-	const float ny = lx / thick_len * (2.f / display_size_.y);
+	const float nx = -ly / len * thickness * 0.5f * (2.f / display_size_.x);
+	const float ny = lx / len * thickness * 0.5f * (2.f / display_size_.y);
 
 	const auto make_vertex = [col](const float x, const float y) -> vertex
 		{
@@ -162,14 +185,20 @@ void rv::renderer::draw_line_ndc(const ndc_position a, const ndc_position b, con
 	draw_vertices(vertices);
 }
 
-void rv::renderer::add_circle_path(const position pos, const float radius, const cstd::size_t segment_count) noexcept
+void rv::renderer::add_arc_path(const position pos, const float radius, const float a_min, const float a_max,
+                                const cstd::size_t segment_count) noexcept
 {
 	for (cstd::size_t i = 0; i < segment_count; i++)
 	{
-		const float a = (static_cast<float>(i) / static_cast<float>(segment_count)) * 2.f * cstd::numbers::pi_f;
+		const float a = a_min + (static_cast<float>(i) / static_cast<float>(segment_count)) * (a_max - a_min);
 
 		add_path_point({ pos.x + cstd::cosf(a) * radius, pos.y + cstd::sinf(a) * radius });
 	}
+}
+
+void rv::renderer::add_circle_path(const position pos, const float radius, const cstd::size_t segment_count) noexcept
+{
+	add_arc_path(pos, radius, 0.f, cstd::numbers::pi_f * 2.f, static_cast<cstd::int32_t>(segment_count));
 }
 
 rv::ndc_position rv::renderer::to_ndc(const position pos) const noexcept

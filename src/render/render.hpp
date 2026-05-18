@@ -40,8 +40,8 @@ namespace rv
 
 		void draw_vertices(span_t<const vertex> vertices) noexcept;
 
-		void draw_rect(position min, position max, color col, float thickness = 1.f) noexcept;
-		void draw_rect_filled(position min, position max, color col) noexcept;
+		void draw_rect(position min, position max, color col, float thickness = 1.f, float rounding = 0.f) noexcept;
+		void draw_rect_filled(position min, position max, color col, float rounding = 0.f) noexcept;
 
 		void draw_line(position a, position b, color col, float thickness = 1.f) noexcept;
 
@@ -55,6 +55,7 @@ namespace rv
 
 		void draw_line_ndc(ndc_position a, ndc_position b, color col, float thickness = 1.f) noexcept;
 
+		void add_arc_path(position pos, float radius, float a_min, float a_max, cstd::size_t segment_count = 8) noexcept;
 		void add_circle_path(position pos, float radius, cstd::size_t segment_count) noexcept;
 
 		void add_path_point(position pos);
@@ -145,8 +146,8 @@ namespace rv
 	class dx11_renderer : public renderer
 	{
 	public:
-		dx11_renderer(ID3D11Device* device, ID3D11DeviceContext* context) noexcept;
-		dx11_renderer(IDXGISwapChain* swap_chain) noexcept;
+		explicit dx11_renderer(ID3D11Device* device, ID3D11DeviceContext* context) noexcept;
+		explicit dx11_renderer(IDXGISwapChain* swap_chain) noexcept;
 
 		bool init() noexcept override;
 		void begin_frame(vector_2d<float> display_size) noexcept override;

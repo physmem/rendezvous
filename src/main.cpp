@@ -89,8 +89,8 @@ cstd::int32_t main()
 		
 		renderer->begin_frame({ static_cast<float>(width), static_cast<float>(height) });
 
-		renderer->draw_rect_filled({ 100.f, 100.f }, { 300.f, 250.f }, { 1.f, 0.f, 0.f, 1.f });
-		renderer->draw_rect({ 400.f, 100.f }, { 600.f, 250.f }, { 0.f, 1.f, 0.f, 1.f }, 5.f);
+		renderer->draw_rect_filled({ 100.f, 100.f }, { 300.f, 250.f }, { 1.f, 0.f, 0.f, 1.f }, 17.5f);
+		renderer->draw_rect({ 400.f, 100.f }, { 600.f, 250.f }, { 0.f, 1.f, 0.f, 1.f }, 5.f, 5.f);
 		renderer->draw_rect({ 100.f, 300.f }, { 300.f, 450.f }, { 1.f, 1.f, 1.f, 1.f });
 		renderer->draw_line({ 500.f, 300.f }, { 555.f, 355.f }, { 0.f, 1.f, 0.f, 1.f }, 2.f);
 		renderer->draw_circle({ 500.f, 500.f }, 50.f, { 0.f, 1.f, 0.f, 1.f }, 2.f);

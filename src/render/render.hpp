@@ -75,6 +75,7 @@ namespace rv
 	{
 	public:
 		dx11_object() noexcept = default;
+
 		explicit dx11_object(T* value_ptr) noexcept
 				:	value_(value_ptr) { }
 
@@ -110,6 +111,11 @@ namespace rv
 			return value_;
 		}
 
+		explicit operator bool() const noexcept
+		{
+			return value_ != nullptr;
+		}
+
 		void release()
 		{
 			if (value_)
@@ -139,9 +145,8 @@ namespace rv
 	class dx11_renderer : public renderer
 	{
 	public:
-		dx11_renderer(ID3D11Device* device, ID3D11DeviceContext* context)
-				:	device_(device),
-					context_(context) { }
+		dx11_renderer(ID3D11Device* device, ID3D11DeviceContext* context) noexcept;
+		dx11_renderer(IDXGISwapChain* swap_chain) noexcept;
 
 		bool init() noexcept override;
 		void begin_frame(vector_2d<float> display_size) noexcept override;
@@ -153,8 +158,8 @@ namespace rv
 
 		void flush_pending_vertices() noexcept override;
 
-		ID3D11Device* device_;
-		ID3D11DeviceContext* context_;
+		dx11_object<ID3D11Device> device_;
+		dx11_object<ID3D11DeviceContext> context_;
 
 		dx11_object<ID3D11PixelShader> pixel_shader_;
 		dx11_object<ID3D11VertexShader> vertex_shader_;

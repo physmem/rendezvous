@@ -181,6 +181,22 @@ rv::ndc_position rv::renderer::to_ndc(const position pos) const noexcept
 	};
 }
 
+rv::dx11_renderer::dx11_renderer(ID3D11Device* const device, ID3D11DeviceContext* const context) noexcept
+		:	device_(device),
+			context_(context)
+{
+	device_->AddRef();
+	context_->AddRef();
+}
+
+rv::dx11_renderer::dx11_renderer(IDXGISwapChain* swap_chain) noexcept
+{
+	if (swap_chain->GetDevice(IID_PPV_ARGS(device_.release_and_get())) == S_OK)
+	{
+		device_->GetImmediateContext(context_.release_and_get());
+	}
+}
+
 bool rv::dx11_renderer::init() noexcept
 {
 	if (!device_ || !context_)

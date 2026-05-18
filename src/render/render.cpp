@@ -49,6 +49,22 @@ void rv::renderer::draw_line(const position a, const position b, const color col
 	return draw_line_ndc(ndc_a, ndc_b, col, thickness);
 }
 
+void rv::renderer::draw_circle(const position pos, const float radius, const color col, const float thickness,
+                               const cstd::size_t segment_count) noexcept
+{
+	add_circle_path(pos, radius, segment_count);
+
+	draw_lined_path(col, thickness, true);
+}
+
+void rv::renderer::draw_circle_filled(const position pos, const float radius, const color col,
+                                      const cstd::size_t segment_count) noexcept
+{
+	add_circle_path(pos, radius, segment_count);
+
+	draw_filled_path(col);
+}
+
 void rv::renderer::add_path_point(const position pos)
 {
 	path_points_.push_back(to_ndc(pos));
@@ -144,6 +160,16 @@ void rv::renderer::draw_line_ndc(const ndc_position a, const ndc_position b, con
 	};
 
 	draw_vertices(vertices);
+}
+
+void rv::renderer::add_circle_path(const position pos, const float radius, const cstd::size_t segment_count) noexcept
+{
+	for (cstd::size_t i = 0; i < segment_count; i++)
+	{
+		const float a = (static_cast<float>(i) / static_cast<float>(segment_count)) * 2.f * cstd::numbers::pi_f;
+
+		add_path_point({ pos.x + cstd::cosf(a) * radius, pos.y + cstd::sinf(a) * radius });
+	}
 }
 
 rv::ndc_position rv::renderer::to_ndc(const position pos) const noexcept

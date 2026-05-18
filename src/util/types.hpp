@@ -1,6 +1,7 @@
 #pragma once
 #include <string_view>
 #include <string>
+#include <numbers>
 #include <vector>
 #include <memory>
 #include <cmath>
@@ -55,9 +56,24 @@ namespace cstd
 		return std::sqrtf(x);
 	}
 
+	inline float cosf(const float x)
+	{
+		return std::cosf(x);
+	}
+
+	inline float sinf(const float x)
+	{
+		return std::sinf(x);
+	}
+
 	template <class T, class ...Args>
 	unique_ptr_t<T> make_unique(Args&&... args)
 	{
 		return std::make_unique<T>(std::forward<Args>(args)...);
+	}
+
+	namespace numbers
+	{
+		inline constexpr float pi_f = std::numbers::pi_v<float>;
 	}
 }

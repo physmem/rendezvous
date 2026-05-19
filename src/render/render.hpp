@@ -13,11 +13,66 @@ namespace rv
 	struct vector_2d
 	{
 		T x, y;
+
+		[[nodiscard]] vector_2d operator+(const vector_2d& other) const noexcept
+		{
+			return vector_2d{ x + other.x, y + other.y };
+		}
+
+		[[nodiscard]] vector_2d operator-(const vector_2d& other) const noexcept
+		{
+			return vector_2d{ x - other.x, y - other.y };
+		}
+
+		[[nodiscard]] vector_2d operator*(const T scalar) const noexcept
+		{
+			return { x * scalar, y * scalar };
+		}
+
+		[[nodiscard]] T dot(const vector_2d& other) const noexcept
+		{
+			return x * other.x + y * other.y;
+		}
+
+		[[nodiscard]] explicit operator bool() const noexcept
+		{
+			return x != T{} || y != T{};
+		}
+
+		[[nodiscard]] float distance(const vector_2d& other) const noexcept
+		{
+			const float dx = static_cast<float>(x - other.x);
+			const float dy = static_cast<float>(y - other.y);
+
+			return cstd::sqrtf(dx * dx + dy * dy);
+		}
+
+		[[nodiscard]] float magnitude() const noexcept
+		{
+			return cstd::sqrtf(static_cast<float>(x * x + y * y));
+		}
+
+		[[nodiscard]] vector_2d normalise() const noexcept
+		{
+			const float mag = magnitude();
+
+			if (mag < 0.0001f)
+			{
+				return { };
+			}
+
+			return vector_2d{ x / mag, y / mag };
+		}
+
+		[[nodiscard]] vector_2d perpendicular() const noexcept
+		{
+			return { y, -x };
+		}
 	};
 
 	struct position : vector_2d<float>
 	{
-		
+
 	};
 
 	struct ndc_position : vector_2d<float>
@@ -53,8 +108,6 @@ namespace rv
 	protected:
 		virtual void flush_pending_vertices() noexcept = 0;
 
-		void draw_line_ndc(ndc_position a, ndc_position b, color col, float thickness = 1.f) noexcept;
-
 		void add_arc_path(position pos, float radius, float a_min, float a_max, cstd::size_t segment_count = 8) noexcept;
 		void add_circle_path(position pos, float radius, cstd::size_t segment_count) noexcept;
 
@@ -65,7 +118,7 @@ namespace rv
 		[[nodiscard]] ndc_position to_ndc(position pos) const noexcept;
 
 		vector_2d<float> display_size_ = { };
-		vector_t<ndc_position> path_points_ = { };
+		vector_t<position> path_points_ = { };
 		vector_t<vertex> pending_vertices_ = { };
 
 		cstd::size_t buffer_vertex_count_ = 0;

@@ -68,10 +68,10 @@ void rv::renderer::draw_rect_filled(const position min, const position max, cons
 
 void rv::renderer::draw_line(const position a, const position b, const color col, const float thickness) noexcept
 {
-	const ndc_position ndc_a = to_ndc(a);
-	const ndc_position ndc_b = to_ndc(b);
+	add_path_point(a);
+	add_path_point(b);
 
-	return draw_line_ndc(ndc_a, ndc_b, col, thickness);
+	draw_lined_path(col, thickness, false);
 }
 
 void rv::renderer::draw_circle(const position pos, const float radius, const color col, const float thickness,
@@ -92,32 +92,101 @@ void rv::renderer::draw_circle_filled(const position pos, const float radius, co
 
 void rv::renderer::add_path_point(const position pos)
 {
-	path_points_.push_back(to_ndc(pos));
+	path_points_.push_back(pos);
 }
 
 void rv::renderer::draw_lined_path(const color col, const float thickness, const bool closed)
 {
-	if (path_points_.size() <= 1)
+	const cstd::size_t n = path_points_.size();
+
+	if (n <= 1)
 	{
 		path_points_.clear();
 
 		return;
 	}
 
-	for (cstd::size_t i = 0; i < path_points_.size() - 1; i++)
-	{
-		const ndc_position point = path_points_[i];
-		const ndc_position next_point = path_points_[i + 1];
+	const float half = thickness * 0.5f;
 
-		draw_line_ndc(point, next_point, col, thickness);
+	const auto make_join = [&](const position previous, const position current, const position next) -> position
+		{
+			const auto dir_in = (current - previous).normalise();
+			const auto dir_out = (next - current).normalise();
+
+			const auto in_eff = dir_in ? dir_in : dir_out;
+			const auto out_eff = dir_out ? dir_out : dir_in;
+
+			const auto tangent = (in_eff + out_eff).normalise();
+			const auto normal = tangent.perpendicular();
+
+			const float c = tangent.dot(out_eff);
+			const float scale = 1.f / cstd::fmaxf(c, 0.1f);
+
+			const auto [x, y] = normal * (half * scale);
+
+			return { x, y };
+		};
+
+	const auto draw_segment = [&](const position pos_a, const position join_a, const position pos_b, const position join_b)
+		{
+			const ndc_position outer_a = to_ndc({ pos_a.x + join_a.x, pos_a.y + join_a.y });
+			const ndc_position inner_a = to_ndc({ pos_a.x - join_a.x, pos_a.y - join_a.y });
+			const ndc_position outer_b = to_ndc({ pos_b.x + join_b.x, pos_b.y + join_b.y });
+			const ndc_position inner_b = to_ndc({ pos_b.x - join_b.x, pos_b.y - join_b.y });
+
+			const array_t<vertex, 6> v =
+			{
+				vertex{.pos = outer_a, .col = col },
+				vertex{.pos = outer_b, .col = col },
+				vertex{.pos = inner_a, .col = col },
+				vertex{.pos = outer_b, .col = col },
+				vertex{.pos = inner_b, .col = col },
+				vertex{.pos = inner_a, .col = col },
+			};
+
+			draw_vertices(v);
+		};
+
+	const auto prev_of = [&](const cstd::size_t i) -> position
+		{
+			if (0 < i)
+			{
+				return path_points_[i - 1];
+			}
+
+			return closed ? path_points_[n - 1] : path_points_[i];
+		};
+
+	const auto next_of = [&](const cstd::size_t i) -> position
+		{
+			if (i + 1 < n)
+			{
+				return path_points_[i + 1];
+			}
+
+			return closed ? path_points_[0] : path_points_[i];
+		};
+
+	const position first_pos = path_points_[0];
+	const position first_join = make_join(prev_of(0), first_pos, next_of(0));
+
+	position previous_pos = first_pos;
+	position previous_join = first_join;
+
+	for (cstd::size_t i = 1; i < n; i++)
+	{
+		const position current_pos = path_points_[i];
+		const position current_join = make_join(prev_of(i), current_pos, next_of(i));
+
+		draw_segment(previous_pos, previous_join, current_pos, current_join);
+
+		previous_pos = current_pos;
+		previous_join = current_join;
 	}
 
 	if (closed)
 	{
-		const ndc_position first_point = path_points_.front();
-		const ndc_position last_point = path_points_.back();
-
-		draw_line_ndc(first_point, last_point, col, thickness);
+		draw_segment(previous_pos, previous_join, first_pos, first_join);
 	}
 
 	path_points_.clear();
@@ -132,12 +201,12 @@ void rv::renderer::draw_filled_path(const color col)
 		return;
 	}
 
-	const ndc_position first_point = path_points_[0];
+	const ndc_position first_point = to_ndc(path_points_[0]);
 
 	for (cstd::size_t i = 1; i < path_points_.size() - 1; i++)
 	{
-		const ndc_position point = path_points_[i];
-		const ndc_position next_point = path_points_[i + 1];
+		const ndc_position point = to_ndc(path_points_[i]);
+		const ndc_position next_point = to_ndc(path_points_[i + 1]);
 
 		const array_t<vertex, 3> vertices =
 		{
@@ -150,39 +219,6 @@ void rv::renderer::draw_filled_path(const color col)
 	}
 
 	path_points_.clear();
-}
-
-void rv::renderer::draw_line_ndc(const ndc_position a, const ndc_position b, const color col, const float thickness) noexcept
-{
-	const float lx = b.x - a.x;
-	const float ly = b.y - a.y;
-
-	const float len = cstd::sqrtf(lx * lx + ly * ly);
-
-	if (len < 0.0001f)
-	{
-		return;
-	}
-
-	const float nx = -ly / len * thickness * 0.5f * (2.f / display_size_.x);
-	const float ny = lx / len * thickness * 0.5f * (2.f / display_size_.y);
-
-	const auto make_vertex = [col](const float x, const float y) -> vertex
-		{
-			return vertex{ .pos = { x, y }, .col = col };
-		};
-
-	const array_t<vertex, 6> vertices =
-	{
-		make_vertex(a.x + nx, a.y + ny),
-		make_vertex(b.x + nx, b.y + ny),
-		make_vertex(a.x - nx, a.y - ny),
-		make_vertex(b.x + nx, b.y + ny),
-		make_vertex(b.x - nx, b.y - ny),
-		make_vertex(a.x - nx, a.y - ny),
-	};
-
-	draw_vertices(vertices);
 }
 
 void rv::renderer::add_arc_path(const position pos, const float radius, const float a_min, const float a_max,

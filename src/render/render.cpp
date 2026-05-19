@@ -106,9 +106,12 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 		return;
 	}
 
-	const float half = thickness * 0.5f;
+	constexpr float fringe_width = 1.f;
 
-	const auto make_join = [&](const position previous, const position current, const position next) -> position
+	const float half = thickness * 0.5f;
+	const color transparent{ col.r, col.g, col.b, 0.f };
+
+	const auto make_join = [](const position previous, const position current, const position next) -> position
 		{
 			const auto dir_in = (current - previous).normalise();
 			const auto dir_out = (next - current).normalise();
@@ -122,29 +125,53 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 			const float c = tangent.dot(out_eff);
 			const float scale = 1.f / cstd::fmaxf(c, 0.1f);
 
-			const auto [x, y] = normal * (half * scale);
+			const auto [x, y] = normal * scale;
 
 			return { x, y };
 		};
 
 	const auto draw_segment = [&](const position pos_a, const position join_a, const position pos_b, const position join_b)
 		{
-			const ndc_position outer_a = to_ndc({ pos_a.x + join_a.x, pos_a.y + join_a.y });
-			const ndc_position inner_a = to_ndc({ pos_a.x - join_a.x, pos_a.y - join_a.y });
-			const ndc_position outer_b = to_ndc({ pos_b.x + join_b.x, pos_b.y + join_b.y });
-			const ndc_position inner_b = to_ndc({ pos_b.x - join_b.x, pos_b.y - join_b.y });
+			const auto core_a = join_a * half;
+			const auto outer_a = join_a * (half + fringe_width);
+			const auto core_b = join_b * half;
+			const auto outer_b = join_b * (half + fringe_width);
 
-			const array_t<vertex, 6> v =
+			const ndc_position a_outer_fringe = to_ndc({ pos_a.x + outer_a.x, pos_a.y + outer_a.y });
+			const ndc_position a_outer_opaque = to_ndc({ pos_a.x + core_a.x,  pos_a.y + core_a.y });
+			const ndc_position a_inner_opaque = to_ndc({ pos_a.x - core_a.x,  pos_a.y - core_a.y });
+			const ndc_position a_inner_fringe = to_ndc({ pos_a.x - outer_a.x, pos_a.y - outer_a.y });
+
+			const ndc_position b_outer_fringe = to_ndc({ pos_b.x + outer_b.x, pos_b.y + outer_b.y });
+			const ndc_position b_outer_opaque = to_ndc({ pos_b.x + core_b.x,  pos_b.y + core_b.y });
+			const ndc_position b_inner_opaque = to_ndc({ pos_b.x - core_b.x,  pos_b.y - core_b.y });
+			const ndc_position b_inner_fringe = to_ndc({ pos_b.x - outer_b.x, pos_b.y - outer_b.y });
+
+			const array_t<vertex, 18> vertices =
 			{
-				vertex{.pos = outer_a, .col = col },
-				vertex{.pos = outer_b, .col = col },
-				vertex{.pos = inner_a, .col = col },
-				vertex{.pos = outer_b, .col = col },
-				vertex{.pos = inner_b, .col = col },
-				vertex{.pos = inner_a, .col = col },
+				vertex{ .pos = a_outer_fringe, .col = transparent },
+				vertex{ .pos = b_outer_fringe, .col = transparent },
+				vertex{ .pos = a_outer_opaque, .col = col },
+				vertex{ .pos = b_outer_fringe, .col = transparent },
+				vertex{ .pos = b_outer_opaque, .col = col },
+				vertex{ .pos = a_outer_opaque, .col = col },
+
+				vertex{ .pos = a_outer_opaque, .col = col },
+				vertex{ .pos = b_outer_opaque, .col = col },
+				vertex{ .pos = a_inner_opaque, .col = col },
+				vertex{ .pos = b_outer_opaque, .col = col },
+				vertex{ .pos = b_inner_opaque, .col = col },
+				vertex{ .pos = a_inner_opaque, .col = col },
+
+				vertex{ .pos = a_inner_opaque, .col = col },
+				vertex{ .pos = b_inner_opaque, .col = col },
+				vertex{ .pos = a_inner_fringe, .col = transparent },
+				vertex{ .pos = b_inner_opaque, .col = col },
+				vertex{ .pos = b_inner_fringe, .col = transparent },
+				vertex{ .pos = a_inner_fringe, .col = transparent },
 			};
 
-			draw_vertices(v);
+			draw_vertices(vertices);
 		};
 
 	const auto prev_of = [&](const cstd::size_t i) -> position
@@ -217,6 +244,8 @@ void rv::renderer::draw_filled_path(const color col)
 
 		draw_vertices(vertices);
 	}
+
+	draw_lined_path(col, 0.f);
 
 	path_points_.clear();
 }

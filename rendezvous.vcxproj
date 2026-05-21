@@ -145,6 +145,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\render\impl\dx11.cpp" />
     <ClCompile Include="src\render\render.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -152,8 +153,10 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="src\log\log.hpp" />
+    <ClInclude Include="src\render\impl\dx11.hpp" />
     <ClInclude Include="src\render\render.hpp" />
     <ClInclude Include="src\render\shaders.hpp" />
+    <ClInclude Include="src\util\math.hpp" />
     <ClInclude Include="src\util\types.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

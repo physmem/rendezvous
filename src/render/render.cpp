@@ -178,6 +178,25 @@ void rv::renderer::draw_text(const font& font, const position pos, const string_
 	current_texture_ = default_texture_;
 }
 
+rv::position rv::renderer::calc_text_size(const font& font, const string_view_t text, const float size) const noexcept 
+{
+	if (text.empty() || !font.texture()) 
+	{
+		return { 0.f, 0.f };
+	}
+
+	const float scale = size != 0.f ? size / font.baked_size() : 1.f;
+	float width = 0.f;
+
+	for (const char c : text) 
+	{
+		const glyph& g = font.glyph(c);
+		width += g.advance * scale;
+	}
+
+	return { width, font.baked_size() * scale };
+}
+
 optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> bytes, const float pixel_height) 
 {
 #ifdef RV_USE_FREETYPE

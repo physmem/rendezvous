@@ -100,7 +100,13 @@ cstd::int32_t main()
 
 		if (font)
 		{
-			renderer->draw_text(*font, { 100.f, 500.f }, "Hello world!", { 0.f, 1.f, 1.f, 1.f }, 35.f);
+			constexpr string_view_t text = "Hello world!";
+			constexpr float size = 35.f;
+			constexpr rv::position text_pos = { 100.f, 500.f};
+			const rv::position text_size = renderer->calc_text_size(*font, text, size);
+
+			renderer->draw_rect_filled(text_pos, {text_pos.x + text_size.x, text_pos.y + text_size.y}, {1.f, 0.25f, 0.f, 1.f});
+			renderer->draw_text(*font, text_pos, text, { 0.f, 1.f, 1.f, 1.f }, size);
 		}
 
 		renderer->end_frame();

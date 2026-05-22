@@ -4,23 +4,27 @@
 // define this to use freetype font rendering
 // #define RV_USE_FREETYPE
 
-namespace rv {
+namespace rv 
+{
 	class texture;
 	class font;
 
-	struct vertex {
+	struct vertex 
+	{
 		ndc_position pos;
 		color col;
 		texture_position uv;
 	};
 
-	struct vertex_batch {
+	struct vertex_batch 
+	{
 		cstd::uint32_t vertex_offset;
 		cstd::uint32_t vertex_count;
 		shared_ptr_t<texture> texture;
 	};
 
-	class renderer {
+	class renderer 
+	{
 	public:
 		bool init();
 

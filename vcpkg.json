@@ -1,6 +1,7 @@
 {
   "dependencies": [
     "spdlog",
-    "stb"
+    "stb",
+    "freetype"
   ]
 }

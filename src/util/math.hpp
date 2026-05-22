@@ -28,6 +28,16 @@ namespace rv
 			return x * other.x + y * other.y;
 		}
 
+		[[nodiscard]] bool operator==(const vector_2d& other) const
+		{
+			return x == other.x && y == other.y;
+		}
+
+		[[nodiscard]] bool operator!=(const vector_2d& other) const
+		{
+			return x != other.x || y != other.y;
+		}
+
 		[[nodiscard]] explicit operator bool() const noexcept
 		{
 			return x != T{} || y != T{};

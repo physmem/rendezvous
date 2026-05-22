@@ -505,6 +505,16 @@ optional_t<rv::font> rv::renderer::add_font(const string_t& path, const float pi
 	return add_font(buffer, pixel_height, min_char, max_char, anti_aliased);
 }
 
+rv::state& rv::renderer::state() noexcept
+{
+	return state_;
+}
+
+const rv::state& rv::renderer::state() const noexcept
+{
+	return state_;
+}
+
 void rv::renderer::add_path_point(const position pos) 
 {
 	path_points_.push_back(pos);
@@ -682,7 +692,7 @@ rv::ndc_position rv::renderer::to_ndc(const position pos) const noexcept
 {
 	return
 	{
-		2.f * (pos.x - 0.5f) / display_size_.x - 1.f,
-		1.f - 2.f * (pos.y - 0.5f) / display_size_.y
+		2.f * (pos.x - 0.5f) / state_.display_size.x - 1.f,
+		1.f - 2.f * (pos.y - 0.5f) / state_.display_size.y
 	};
 }

@@ -120,7 +120,7 @@ void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcep
 	context_->OMSetBlendState(blend_state_.value(), blend_factor.data(), 0xffffffff);
 	context_->PSSetSamplers(0, 1, &sampler);
 
-	display_size_ = display_size;
+	state_.display_size = display_size;
 }
 
 void rv::dx11_renderer::end_frame() noexcept

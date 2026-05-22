@@ -42,6 +42,11 @@ namespace rv
 		shader_type shader;
 	};
 
+	struct state
+	{
+		vector_2d<float> display_size = { };
+	};
+
 	class renderer 
 	{
 	public:
@@ -64,10 +69,13 @@ namespace rv
 		void draw_circle_filled(position pos, float radius, color col, cstd::size_t segment_count = 32) noexcept;
 
 		void draw_text(const font& font, position pos, string_view_t text, color col, float size = 0.f) noexcept;
-		position calc_text_size(const font& font, string_view_t text, float size = 0.f) const noexcept;
+		[[nodiscard]] position calc_text_size(const font& font, string_view_t text, float size = 0.f) const noexcept;
 
 		optional_t<font> add_font(span_t<const cstd::uint8_t> bytes, float pixel_height = 16.f, cstd::uint32_t min_char = 32, cstd::uint32_t max_char = 126, bool anti_aliased = true);
 		optional_t<font> add_font(const string_t& path, float pixel_height = 16.f, cstd::uint32_t min_char = 32, cstd::uint32_t max_char = 126, bool anti_aliased = true);
+
+		[[nodiscard]] state& state() noexcept;
+		[[nodiscard]] const struct state& state() const noexcept;
 
 	protected:
 		virtual bool init_backend() noexcept = 0;
@@ -83,7 +91,7 @@ namespace rv
 
 		[[nodiscard]] ndc_position to_ndc(position pos) const noexcept;
 
-		vector_2d<float> display_size_ = { };
+		struct state state_;
 		vector_t<position> path_points_ = { };
 		vector_t<vertex> pending_vertices_ = { };
 		vector_t<vertex_batch> pending_batches_ = { };

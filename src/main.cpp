@@ -68,6 +68,8 @@ cstd::int32_t main()
 		return 1;
 	}
 
+	const auto font = renderer->add_font("C:\\Windows\\Fonts\\arial.ttf", 32.f);
+
 	MSG msg = { };
 
 	do
@@ -95,6 +97,11 @@ cstd::int32_t main()
 		renderer->draw_line({ 500.f, 300.f }, { 555.f, 355.f }, { 0.f, 1.f, 0.f, 1.f }, 2.f);
 		renderer->draw_circle({ 500.f, 500.f }, 50.f, { 0.f, 1.f, 0.f, 1.f }, 2.f);
 		renderer->draw_circle_filled({ 675.f, 500.f }, 50.f, { 1.f, 0.f, 0.f, 1.f });
+
+		if (font)
+		{
+			renderer->draw_text(*font, { 100.f, 500.f }, "Hello world!", { 0.f, 1.f, 1.f, 1.f }, 35.f);
+		}
 
 		renderer->end_frame();
 

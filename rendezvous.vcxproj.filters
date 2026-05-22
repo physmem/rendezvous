@@ -47,5 +47,14 @@
     <ClInclude Include="src\util\math.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="src\render\texture.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\render\position.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\file.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

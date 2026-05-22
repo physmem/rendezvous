@@ -17,7 +17,7 @@ rv::dx11_renderer::dx11_renderer(IDXGISwapChain* swap_chain) noexcept
 	}
 }
 
-bool rv::dx11_renderer::init() noexcept
+bool rv::dx11_renderer::init_backend() noexcept
 {
 	if (!device_ || !context_)
 	{
@@ -30,10 +30,11 @@ bool rv::dx11_renderer::init() noexcept
 		return false;
 	}
 
-	static constexpr array_t<D3D11_INPUT_ELEMENT_DESC, 2> layout =
+	static constexpr array_t<D3D11_INPUT_ELEMENT_DESC, 3> layout =
 	{
 		D3D11_INPUT_ELEMENT_DESC{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, offsetof(vertex, pos),  D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		D3D11_INPUT_ELEMENT_DESC{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, col), D3D11_INPUT_PER_VERTEX_DATA, 0}
+		D3D11_INPUT_ELEMENT_DESC{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, col), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		D3D11_INPUT_ELEMENT_DESC{ "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(vertex, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	if (FAILED(device_->CreateInputLayout(layout.data(), static_cast<cstd::uint32_t>(layout.size()), d3d11_vertex_shader.data(), d3d11_vertex_shader.size(), input_layout_.release_and_get())))
@@ -54,7 +55,12 @@ bool rv::dx11_renderer::init() noexcept
 	render_target.BlendOpAlpha = D3D11_BLEND_OP_ADD;
 	render_target.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
 
-	return SUCCEEDED(device_->CreateBlendState(&blend_desc, blend_state_.release_and_get()));
+	if (FAILED(device_->CreateBlendState(&blend_desc, blend_state_.release_and_get())))
+	{
+		return false;
+	}
+
+	return create_sampler();
 }
 
 bool rv::dx11_renderer::create_buffer(const cstd::size_t vertex_count)
@@ -105,9 +111,11 @@ void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcep
 	context_->GSSetShader(nullptr, nullptr, 0);
 	context_->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
+	ID3D11SamplerState* sampler = sampler_state_.value();
 	constexpr array_t<float, 4> blend_factor = { };
 
 	context_->OMSetBlendState(blend_state_.value(), blend_factor.data(), 0xffffffff);
+	context_->PSSetSamplers(0, 1, &sampler);
 
 	display_size_ = display_size;
 }
@@ -115,6 +123,21 @@ void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcep
 void rv::dx11_renderer::end_frame() noexcept
 {
 	flush_pending_vertices();
+}
+
+bool rv::dx11_renderer::create_sampler() noexcept
+{
+	D3D11_SAMPLER_DESC desc = { };
+
+	desc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
+	desc.AddressU = D3D11_TEXTURE_ADDRESS_CLAMP;
+	desc.AddressV = D3D11_TEXTURE_ADDRESS_CLAMP;
+	desc.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP;
+	desc.ComparisonFunc = D3D11_COMPARISON_NEVER;
+	desc.MinLOD = 0.f;
+	desc.MaxLOD = D3D11_FLOAT32_MAX;
+
+	return SUCCEEDED(device_->CreateSamplerState(&desc, sampler_state_.release_and_get()));
 }
 
 void rv::dx11_renderer::flush_pending_vertices() noexcept
@@ -143,7 +166,52 @@ void rv::dx11_renderer::flush_pending_vertices() noexcept
 	ID3D11Buffer* buffer = buffer_.value();
 
 	context_->IASetVertexBuffers(0, 1, &buffer, &strides, &offsets);
-	context_->Draw(static_cast<cstd::int32_t>(pending_vertices_.size()), 0);
+
+	for (const auto& batch : pending_batches_)
+	{
+		const auto texture = std::static_pointer_cast<dx11_texture>(batch.texture);
+		const auto shader = texture->shader_resource();
+
+		context_->PSSetShaderResources(0, 1, &shader);
+		context_->Draw(batch.vertex_count, batch.vertex_offset);
+	}
 
 	pending_vertices_.clear();
+	pending_batches_.clear();
+}
+
+shared_ptr_t<rv::texture> rv::dx11_renderer::create_texture(const span_t<const cstd::uint8_t> buffer,
+                                                            const cstd::uint32_t width, const cstd::uint32_t height)
+{
+	if (buffer.empty() || !width || !height)
+	{
+		return { };
+	}
+
+	D3D11_TEXTURE2D_DESC desc = { };
+
+	desc.Width = width;
+	desc.Height = height;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_IMMUTABLE;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+	D3D11_SUBRESOURCE_DATA data = { };
+
+	data.pSysMem = buffer.data();
+	data.SysMemPitch = width * 4;
+
+	dx11_object<ID3D11Texture2D> texture_2d = { };
+	dx11_object<ID3D11ShaderResourceView> shader_resource = { };
+
+	if (FAILED(device_->CreateTexture2D(&desc, &data, texture_2d.release_and_get())) ||
+		FAILED(device_->CreateShaderResourceView(texture_2d.value(), nullptr, shader_resource.release_and_get())))
+	{
+		return nullptr;
+	}
+
+	return cstd::make_shared<dx11_texture>(this, cstd::move(texture_2d), cstd::move(shader_resource));
 }

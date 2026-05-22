@@ -1,7 +1,42 @@
 #include "render.hpp"
+#include "texture.hpp"
+
+#define STB_TRUETYPE_IMPLEMENTATION
+#include <stb_truetype.h>
+
+#include "../util/file.hpp"
+
+bool rv::renderer::init()
+{
+	if (!init_backend())
+	{
+		return false;
+	}
+
+	constexpr array_t<const cstd::uint8_t, 4> white = { 0xFF, 0xFF, 0xFF, 0xFF };
+
+	default_texture_ = create_texture(white, 1, 1);
+	current_texture_ = default_texture_;
+
+	return static_cast<bool>(default_texture_);
+}
 
 void rv::renderer::draw_vertices(const span_t<const vertex> vertices) noexcept
 {
+	if (vertices.empty())
+	{
+		return;
+	}
+
+	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture)
+	{
+		pending_batches_.emplace_back(static_cast<cstd::uint32_t>(pending_vertices_.size()), 0, current_texture_);
+	}
+
+	auto& current_batch = pending_batches_.back();
+
+	current_batch.vertex_count += static_cast<cstd::uint32_t>(vertices.size());
+
 	pending_vertices_.insert(pending_vertices_.end(), vertices.begin(), vertices.end());
 }
 
@@ -86,6 +121,129 @@ void rv::renderer::draw_circle_filled(const position pos, const float radius, co
 	add_circle_path(pos, radius, segment_count);
 
 	draw_filled_path(col);
+}
+
+void rv::renderer::draw_text(const font& font, const position pos, const string_view_t text, const color col,
+                             const float size) noexcept
+{
+	const shared_ptr_t<texture> font_texture = font.texture();
+
+	if (text.empty() || !font_texture)
+	{
+		return;
+	}
+
+	current_texture_ = font_texture;
+
+	const float scale = size != 0.f ? size / font.baked_size() : 1.f;
+	const float baseline = pos.y + font.ascent() * scale;
+	float pen = pos.x;
+
+	for (const char c : text)
+	{
+		const glyph& g = font.glyph(c);
+
+		if (g.size.x > 0.f && g.size.y > 0.f)
+		{
+			const float x0 = pen + g.bearing.x * scale;
+			const float y0 = baseline - g.bearing.y * scale;
+			const ndc_position a = to_ndc({ x0, y0 });
+			const ndc_position b = to_ndc({ x0 + g.size.x * scale, y0 + g.size.y * scale });
+
+			const auto make_vertex = [col](const float x, const float y, const float u, const float w) -> vertex
+				{
+					return vertex{ .pos = { x, y }, .col = col, .uv = { u, w } };
+				};
+
+			const array_t<vertex, 6> vertices =
+			{
+				make_vertex(a.x, a.y, g.uv0.x, g.uv0.y),
+				make_vertex(b.x, a.y, g.uv1.x, g.uv0.y),
+				make_vertex(a.x, b.y, g.uv0.x, g.uv1.y),
+				make_vertex(b.x, a.y, g.uv1.x, g.uv0.y),
+				make_vertex(b.x, b.y, g.uv1.x, g.uv1.y),
+				make_vertex(a.x, b.y, g.uv0.x, g.uv1.y),
+			};
+			draw_vertices(vertices);
+		}
+
+		pen += g.advance * scale;
+	}
+
+	current_texture_ = default_texture_;
+}
+
+optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> bytes, const float pixel_height)
+{
+	stbtt_fontinfo info = { };
+
+	if (!stbtt_InitFont(&info, bytes.data(), stbtt_GetFontOffsetForIndex(bytes.data(), 0)))
+	{
+		return { };
+	}
+
+	const float scale = stbtt_ScaleForPixelHeight(&info, pixel_height);
+
+	cstd::int32_t ascent = 0;
+	cstd::int32_t descent = 0;
+	cstd::int32_t line_gap = 0;
+
+	stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
+
+	constexpr cstd::uint32_t width = 512;
+	constexpr cstd::uint32_t height = 512;
+
+	vector_t<cstd::uint8_t> coverage(static_cast<cstd::size_t>(width) * height, 0);
+
+	array_t<stbtt_bakedchar, font::glyph_count> baked = { };
+
+	if (!stbtt_BakeFontBitmap(bytes.data(), 0, pixel_height, coverage.data(), width, height, font::first_char,
+	                          font::glyph_count, baked.data()))
+	{
+		return { };
+	}
+
+	vector_t<cstd::uint8_t> rgba(static_cast<cstd::size_t>(width) * height * 4, 0);
+
+	for (cstd::size_t i = 0; i < coverage.size(); i++)
+	{
+		const cstd::size_t c = i * 4;
+
+		rgba[c] = 0xFF;
+		rgba[c + 1] = 0xFF;
+		rgba[c + 2] = 0xFF;
+		rgba[c + 3] = coverage[i];
+	}
+
+	const auto texture = create_texture(rgba, width, height);
+
+	if (!texture)
+	{
+		return { };
+	}
+
+	array_t<glyph, font::glyph_count> glyphs;
+
+	for (cstd::size_t i = 0; i < font::glyph_count; i++)
+	{
+		const stbtt_bakedchar& b = baked[i];
+		glyph& g = glyphs[i];
+
+		g.uv0 = { static_cast<float>(b.x0) / width, static_cast<float>(b.y0) / height };
+		g.uv1 = { static_cast<float>(b.x1) / width, static_cast<float>(b.y1) / height };
+		g.size = { static_cast<float>(b.x1 - b.x0), static_cast<float>(b.y1 - b.y0) };
+		g.bearing = { b.xoff, -b.yoff };
+		g.advance = b.xadvance;
+	}
+
+	return font{ texture, glyphs, pixel_height, static_cast<float>(ascent) * scale, static_cast<float>(line_gap) * scale };
+}
+
+optional_t<rv::font> rv::renderer::add_font(const string_t& path, const float pixel_height)
+{
+	const vector_t<std::uint8_t> buffer = read_file(path);
+
+	return add_font(buffer, pixel_height);
 }
 
 void rv::renderer::add_path_point(const position pos)

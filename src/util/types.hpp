@@ -1,4 +1,5 @@
 #pragma once
+#include <fstream>
 #include <string_view>
 #include <string>
 #include <numbers>
@@ -6,6 +7,7 @@
 #include <memory>
 #include <cmath>
 #include <array>
+#include <optional>
 #include <span>
 
 namespace cstd
@@ -37,6 +39,14 @@ using shared_ptr_t = std::shared_ptr<T>;
 
 template <class T>
 using unique_ptr_t = std::unique_ptr<T>;
+
+template <class T>
+using optional_t = std::optional<T>;
+
+template <class T>
+using istreambuf_iterator_t = std::istreambuf_iterator<T>;
+
+using ifstream_t = std::ifstream;
 
 using string_t = std::string;
 using wstring_t = std::wstring;
@@ -80,6 +90,23 @@ namespace cstd
 	unique_ptr_t<T> make_unique(Args&&... args)
 	{
 		return std::make_unique<T>(std::forward<Args>(args)...);
+	}
+
+	template <class T, class ...Args>
+	shared_ptr_t<T> make_shared(Args&&... args)
+	{
+		return std::make_shared<T>(std::forward<Args>(args)...);
+	}
+
+	template <typename T>
+	constexpr std::remove_reference_t<T>&& move(T&& object) noexcept
+	{
+		return static_cast<std::remove_reference_t<T>&&>(object);
+	}
+
+	namespace ios
+	{
+		inline constexpr int binary = std::ios::binary;
 	}
 
 	namespace numbers

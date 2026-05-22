@@ -1,5 +1,6 @@
 #pragma once
 #include "../render.hpp"
+#include "../texture.hpp"
 #include <d3d11.h>
 
 namespace rv
@@ -78,25 +79,48 @@ namespace rv
 		T* value_ = nullptr;
 	};
 
+	class dx11_texture : public texture
+	{
+	public:
+		explicit dx11_texture(renderer* const renderer, dx11_object<ID3D11Texture2D> texture_2d,
+		                      dx11_object<ID3D11ShaderResourceView> shader_resource)
+				:	texture(renderer),
+					texture_2d_(cstd::move(texture_2d)),
+					shader_resource_(cstd::move(shader_resource)) { }
+
+		[[nodiscard]] ID3D11ShaderResourceView* shader_resource() const noexcept
+		{
+			return shader_resource_.value();
+		}
+
+	protected:
+		dx11_object<ID3D11Texture2D> texture_2d_;
+		dx11_object<ID3D11ShaderResourceView> shader_resource_;
+	};
+
 	class dx11_renderer : public renderer
 	{
 	public:
 		explicit dx11_renderer(ID3D11Device* device, ID3D11DeviceContext* context) noexcept;
 		explicit dx11_renderer(IDXGISwapChain* swap_chain) noexcept;
 
-		bool init() noexcept override;
 		void begin_frame(vector_2d<float> display_size) noexcept override;
 		void end_frame() noexcept override;
 
 	protected:
+		bool create_sampler() noexcept;
+
 		bool create_buffer(cstd::size_t vertex_count);
 		bool try_widen_buffer();
 
+		bool init_backend() noexcept override;
 		void flush_pending_vertices() noexcept override;
+		shared_ptr_t<texture> create_texture(span_t<const cstd::uint8_t> buffer, cstd::uint32_t width, cstd::uint32_t height) override;
 
 		dx11_object<ID3D11Device> device_;
 		dx11_object<ID3D11DeviceContext> context_;
 
+		dx11_object<ID3D11SamplerState> sampler_state_;
 		dx11_object<ID3D11PixelShader> pixel_shader_;
 		dx11_object<ID3D11VertexShader> vertex_shader_;
 		dx11_object<ID3D11InputLayout> input_layout_;

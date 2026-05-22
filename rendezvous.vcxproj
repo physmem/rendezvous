@@ -154,8 +154,11 @@
   <ItemGroup>
     <ClInclude Include="src\log\log.hpp" />
     <ClInclude Include="src\render\impl\dx11.hpp" />
+    <ClInclude Include="src\render\position.hpp" />
     <ClInclude Include="src\render\render.hpp" />
     <ClInclude Include="src\render\shaders.hpp" />
+    <ClInclude Include="src\render\texture.hpp" />
+    <ClInclude Include="src\util\file.hpp" />
     <ClInclude Include="src\util\math.hpp" />
     <ClInclude Include="src\util\types.hpp" />
   </ItemGroup>

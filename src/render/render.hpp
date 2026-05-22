@@ -1,27 +1,26 @@
 #pragma once
 #include "position.hpp"
 
-namespace rv
-{
+// define this to use freetype font rendering
+// #define RV_USE_FREETYPE
+
+namespace rv {
 	class texture;
 	class font;
 
-	struct vertex
-	{
+	struct vertex {
 		ndc_position pos;
 		color col;
 		texture_position uv;
 	};
 
-	struct vertex_batch
-	{
+	struct vertex_batch {
 		cstd::uint32_t vertex_offset;
 		cstd::uint32_t vertex_count;
 		shared_ptr_t<texture> texture;
 	};
 
-	class renderer
-	{
+	class renderer {
 	public:
 		bool init();
 
@@ -36,7 +35,7 @@ namespace rv
 		void draw_line(position a, position b, color col, float thickness = 1.f) noexcept;
 
 		void draw_circle(position pos, float radius, color col, float thickness = 1.f,
-		                 cstd::size_t segment_count = 32) noexcept;
+						 cstd::size_t segment_count = 32) noexcept;
 
 		void draw_circle_filled(position pos, float radius, color col, cstd::size_t segment_count = 32) noexcept;
 

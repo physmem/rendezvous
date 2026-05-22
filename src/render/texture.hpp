@@ -34,26 +34,25 @@ namespace rv
 	class font
 	{
 	public:
-		constexpr static char first_char = 32;
-		constexpr static char last_char = 126;
-		constexpr static cstd::size_t glyph_count = last_char - first_char + 1;
-
-		explicit font(shared_ptr_t<texture> texture, const array_t<glyph, glyph_count>& glyphs, const float baked_size,
+		explicit font(shared_ptr_t<texture> texture, const vector_t<glyph>& glyphs, const cstd::uint32_t min_char, const cstd::uint32_t max_char, const float baked_size,
 		              const float ascent, const float line_gap)
 				:	texture_(cstd::move(texture)),
 					glyphs_(glyphs),
+					min_char_(min_char),
+					max_char_(max_char),
 					baked_size_(baked_size),
 					ascent_(ascent),
 					line_gap_(line_gap) { }
 
-		[[nodiscard]] const glyph& glyph(const char c) const
+		[[nodiscard]] const glyph& glyph(const cstd::uint32_t c) const
 		{
-			if (c < first_char || last_char < c)
+			if (c < min_char_ || max_char_ < c || glyphs_.empty())
 			{
-				return glyphs_[static_cast<cstd::size_t>('?' - first_char)];
+				const cstd::uint32_t fallback = '?' >= min_char_ && '?' <= max_char_ ? '?' : min_char_;
+				return glyphs_[static_cast<cstd::size_t>(fallback - min_char_)];
 			}
 
-			return glyphs_[static_cast<cstd::size_t>(c - first_char)];
+			return glyphs_[static_cast<cstd::size_t>(c - min_char_)];
 		}
 
 		[[nodiscard]] shared_ptr_t<texture> texture() const
@@ -79,7 +78,9 @@ namespace rv
 	protected:
 		shared_ptr_t<class texture> texture_;
 
-		array_t<struct glyph, glyph_count> glyphs_;
+		vector_t<struct glyph> glyphs_;
+		cstd::uint32_t min_char_;
+		cstd::uint32_t max_char_;
 		float baked_size_;
 		float ascent_;
 		float line_gap_;

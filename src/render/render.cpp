@@ -11,6 +11,43 @@
 
 #include "../util/file.hpp"
 
+namespace
+{
+	cstd::uint32_t decode_utf8(const char*& s, const char* end) noexcept
+	{
+		cstd::uint32_t codepoint = 0;
+		const cstd::uint8_t c0 = static_cast<cstd::uint8_t>(*s);
+		
+		if (c0 < 0x80)
+		{
+			codepoint = c0;
+			s++;
+		}
+		else if ((c0 & 0xE0) == 0xC0 && s + 1 < end)
+		{
+			codepoint = ((c0 & 0x1F) << 6) | (static_cast<cstd::uint8_t>(s[1]) & 0x3F);
+			s += 2;
+		}
+		else if ((c0 & 0xF0) == 0xE0 && s + 2 < end)
+		{
+			codepoint = ((c0 & 0x0F) << 12) | ((static_cast<cstd::uint8_t>(s[1]) & 0x3F) << 6) | (static_cast<cstd::uint8_t>(s[2]) & 0x3F);
+			s += 3;
+		}
+		else if ((c0 & 0xF8) == 0xF0 && s + 3 < end)
+		{
+			codepoint = ((c0 & 0x07) << 18) | ((static_cast<cstd::uint8_t>(s[1]) & 0x3F) << 12) | ((static_cast<cstd::uint8_t>(s[2]) & 0x3F) << 6) | (static_cast<cstd::uint8_t>(s[3]) & 0x3F);
+			s += 4;
+		}
+		else
+		{
+			codepoint = '?';
+			s++;
+		}
+
+		return codepoint;
+	}
+}
+
 bool rv::renderer::init() 
 {
 	if (!init_backend()) 
@@ -198,9 +235,13 @@ void rv::renderer::draw_text(const font& font, const position pos, const string_
 	const float baseline = pos.y + font.ascent() * scale;
 	float pen = pos.x;
 
-	for (const char c : text) 
+	const char* s = text.data();
+	const char* end = s + text.size();
+
+	while (s < end) 
 	{
-		const glyph& g = font.glyph(c);
+		const cstd::uint32_t codepoint = decode_utf8(s, end);
+		const glyph& g = font.glyph(codepoint);
 
 		if (g.size.x > 0.f && g.size.y > 0.f) 
 		{
@@ -242,16 +283,20 @@ rv::position rv::renderer::calc_text_size(const font& font, const string_view_t 
 	const float scale = size != 0.f ? size / font.baked_size() : 1.f;
 	float width = 0.f;
 
-	for (const char c : text) 
+	const char* s = text.data();
+	const char* end = s + text.size();
+
+	while (s < end) 
 	{
-		const glyph& g = font.glyph(c);
+		const cstd::uint32_t codepoint = decode_utf8(s, end);
+		const glyph& g = font.glyph(codepoint);
 		width += g.advance * scale;
 	}
 
 	return { width, font.baked_size() * scale };
 }
 
-optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> bytes, const float pixel_height) 
+optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> bytes, const float pixel_height, const cstd::uint32_t min_char, const cstd::uint32_t max_char) 
 {
 #ifdef RV_USE_FREETYPE
 	FT_Library library = nullptr;
@@ -275,20 +320,27 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 	cstd::int32_t ascent = static_cast<cstd::int32_t>(face->size->metrics.ascender >> 6);
 	cstd::int32_t line_gap = static_cast<cstd::int32_t>((face->size->metrics.height - face->size->metrics.ascender + face->size->metrics.descender) >> 6);
 
-	constexpr cstd::uint32_t width = 512;
-	constexpr cstd::uint32_t height = 512;
+	const float estimated_area = static_cast<float>(max_char - min_char + 1) * pixel_height * pixel_height * 1.5f;
+	cstd::uint32_t width = 512;
+	cstd::uint32_t height = 512;
+	while (static_cast<float>(width * height) < estimated_area) 
+	{
+		width *= 2;
+		height *= 2;
+	}
 
 	vector_t<cstd::uint8_t> coverage(static_cast<cstd::size_t>(width) * height, 0);
 
-	array_t<glyph, font::glyph_count> glyphs = { };
+	const cstd::size_t glyph_count = static_cast<cstd::size_t>(max_char - min_char + 1);
+	vector_t<glyph> glyphs(glyph_count);
 
 	cstd::uint32_t pen_x = 0;
 	cstd::uint32_t pen_y = 0;
 	cstd::uint32_t row_height = 0;
 
-	for (cstd::size_t i = 0; i < font::glyph_count; i++) 
+	for (cstd::size_t i = 0; i < glyph_count; i++) 
 	{
-		const char c = static_cast<char>(font::first_char + i);
+		const cstd::uint32_t c = min_char + static_cast<cstd::uint32_t>(i);
 
 		if (FT_Load_Char(face, c, FT_LOAD_RENDER)) 
 		{
@@ -355,7 +407,7 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 		return { };
 	}
 
-	return font{ texture, glyphs, pixel_height, static_cast<float>(ascent), static_cast<float>(line_gap) };
+	return font{ texture, glyphs, min_char, max_char, pixel_height, static_cast<float>(ascent), static_cast<float>(line_gap) };
 #else
 	stbtt_fontinfo info = { };
 
@@ -372,15 +424,22 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 
 	stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
 
-	constexpr cstd::uint32_t width = 512;
-	constexpr cstd::uint32_t height = 512;
+	const float estimated_area = static_cast<float>(max_char - min_char + 1) * pixel_height * pixel_height * 1.5f;
+	cstd::uint32_t width = 512;
+	cstd::uint32_t height = 512;
+	while (static_cast<float>(width * height) < estimated_area) 
+	{
+		width *= 2;
+		height *= 2;
+	}
 
 	vector_t<cstd::uint8_t> coverage(static_cast<cstd::size_t>(width) * height, 0);
 
-	array_t<stbtt_bakedchar, font::glyph_count> baked = { };
+	const cstd::size_t glyph_count = static_cast<cstd::size_t>(max_char - min_char + 1);
+	vector_t<stbtt_bakedchar> baked(glyph_count);
 
-	if (!stbtt_BakeFontBitmap(bytes.data(), 0, pixel_height, coverage.data(), width, height, font::first_char,
-		font::glyph_count, baked.data()))
+	const int baked_count = stbtt_BakeFontBitmap(bytes.data(), 0, pixel_height, coverage.data(), width, height, static_cast<int>(min_char), static_cast<int>(glyph_count), baked.data());
+	if (baked_count <= 0)
 	{
 		return { };
 	}
@@ -403,9 +462,9 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 		return { };
 	}
 
-	array_t<glyph, font::glyph_count> glyphs;
+	vector_t<glyph> glyphs(glyph_count);
 
-	for (cstd::size_t i = 0; i < font::glyph_count; i++) 
+	for (cstd::size_t i = 0; i < glyph_count; i++) 
 	{
 		const stbtt_bakedchar& b = baked[i];
 		glyph& g = glyphs[i];
@@ -417,15 +476,15 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 		g.advance = b.xadvance;
 	}
 
-	return font{ texture, glyphs, pixel_height, static_cast<float>(ascent) * scale, static_cast<float>(line_gap) * scale };
+	return font{ texture, glyphs, min_char, max_char, pixel_height, static_cast<float>(ascent) * scale, static_cast<float>(line_gap) * scale };
 #endif
 }
 
-optional_t<rv::font> rv::renderer::add_font(const string_t& path, const float pixel_height) 
+optional_t<rv::font> rv::renderer::add_font(const string_t& path, const float pixel_height, const cstd::uint32_t min_char, const cstd::uint32_t max_char) 
 {
 	const vector_t<std::uint8_t> buffer = read_file(path);
 
-	return add_font(buffer, pixel_height);
+	return add_font(buffer, pixel_height, min_char, max_char);
 }
 
 void rv::renderer::add_path_point(const position pos) 

@@ -66,8 +66,8 @@ namespace rv
 		void draw_text(const font& font, position pos, string_view_t text, color col, float size = 0.f) noexcept;
 		position calc_text_size(const font& font, string_view_t text, float size = 0.f) const noexcept;
 
-		optional_t<font> add_font(span_t<const cstd::uint8_t> bytes, float pixel_height = 16.f);
-		optional_t<font> add_font(const string_t& path, float pixel_height = 16.f);
+		optional_t<font> add_font(span_t<const cstd::uint8_t> bytes, float pixel_height = 16.f, cstd::uint32_t min_char = 32, cstd::uint32_t max_char = 126);
+		optional_t<font> add_font(const string_t& path, float pixel_height = 16.f, cstd::uint32_t min_char = 32, cstd::uint32_t max_char = 126);
 
 	protected:
 		virtual bool init_backend() noexcept = 0;

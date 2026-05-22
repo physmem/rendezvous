@@ -9,11 +9,29 @@ namespace rv
 	class texture;
 	class font;
 
+	enum rounding_flags : cstd::uint32_t 
+	{
+		rounding_flags_none = 0,
+		rounding_flags_top_left = 1 << 0,
+		rounding_flags_top_right = 1 << 1,
+		rounding_flags_bottom_right = 1 << 2,
+		rounding_flags_bottom_left = 1 << 3,
+		rounding_flags_all = rounding_flags_top_left | rounding_flags_top_right | rounding_flags_bottom_right | rounding_flags_bottom_left
+	};
+
 	struct vertex 
 	{
 		ndc_position pos;
 		color col;
 		texture_position uv;
+		array_t<float, 8> custom_data;
+	};
+
+	enum class shader_type : cstd::uint8_t
+	{
+		default_shader,
+		shadow_shader,
+		rect_shader
 	};
 
 	struct vertex_batch 
@@ -21,6 +39,7 @@ namespace rv
 		cstd::uint32_t vertex_offset;
 		cstd::uint32_t vertex_count;
 		shared_ptr_t<texture> texture;
+		shader_type shader;
 	};
 
 	class renderer 
@@ -31,10 +50,11 @@ namespace rv
 		virtual void begin_frame(vector_2d<float> display_size) noexcept = 0;
 		virtual void end_frame() noexcept = 0;
 
-		void draw_vertices(span_t<const vertex> vertices) noexcept;
+		void draw_vertices(span_t<const vertex> vertices, shader_type shader = shader_type::default_shader) noexcept;
 
 		void draw_rect(position min, position max, color col, float thickness = 1.f, float rounding = 0.f) noexcept;
-		void draw_rect_filled(position min, position max, color col, float rounding = 0.f) noexcept;
+		void draw_rect_filled(position min, position max, color col, float rounding = 0.f, rounding_flags flags = rounding_flags_all) noexcept;
+		void draw_shadow_rect(position min, position max, color col, float rounding = 0.f, float shadow_blur = 15.f, float shadow_spread = 0.f, rounding_flags flags = rounding_flags_all) noexcept;
 
 		void draw_line(position a, position b, color col, float thickness = 1.f) noexcept;
 

@@ -25,16 +25,19 @@ bool rv::dx11_renderer::init_backend() noexcept
 	}
 
 	if (FAILED(device_->CreateVertexShader(d3d11_vertex_shader.data(), d3d11_vertex_shader.size(), nullptr, vertex_shader_.release_and_get())) ||
-		FAILED(device_->CreatePixelShader(d3d11_pixel_shader.data(), d3d11_pixel_shader.size(), nullptr, pixel_shader_.release_and_get())))
-	{
+		FAILED(device_->CreatePixelShader(d3d11_pixel_shader.data(), d3d11_pixel_shader.size(), nullptr, pixel_shader_.release_and_get())) ||
+		FAILED(device_->CreatePixelShader(d3d11_shadow_pixel_shader.data(), d3d11_shadow_pixel_shader.size(), nullptr, shadow_pixel_shader_.release_and_get())) ||
+		FAILED(device_->CreatePixelShader(d3d11_rect_pixel_shader.data(), d3d11_rect_pixel_shader.size(), nullptr, rect_pixel_shader_.release_and_get()))) {
 		return false;
 	}
 
-	static constexpr array_t<D3D11_INPUT_ELEMENT_DESC, 3> layout =
+	static constexpr array_t<D3D11_INPUT_ELEMENT_DESC, 5> layout =
 	{
 		D3D11_INPUT_ELEMENT_DESC{ "POSITION", 0, DXGI_FORMAT_R32G32_FLOAT,    0, offsetof(vertex, pos),  D3D11_INPUT_PER_VERTEX_DATA, 0 },
 		D3D11_INPUT_ELEMENT_DESC{ "COLOR",    0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, col), D3D11_INPUT_PER_VERTEX_DATA, 0 },
-		D3D11_INPUT_ELEMENT_DESC{ "TEXCOORD",    0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(vertex, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 }
+		D3D11_INPUT_ELEMENT_DESC{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, offsetof(vertex, uv), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		D3D11_INPUT_ELEMENT_DESC{ "TEXCOORD", 1, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, custom_data), D3D11_INPUT_PER_VERTEX_DATA, 0 },
+		D3D11_INPUT_ELEMENT_DESC{ "TEXCOORD", 2, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, offsetof(vertex, custom_data) + 16, D3D11_INPUT_PER_VERTEX_DATA, 0 }
 	};
 
 	if (FAILED(device_->CreateInputLayout(layout.data(), static_cast<cstd::uint32_t>(layout.size()), d3d11_vertex_shader.data(), d3d11_vertex_shader.size(), input_layout_.release_and_get())))
@@ -140,16 +143,16 @@ bool rv::dx11_renderer::create_sampler() noexcept
 	return SUCCEEDED(device_->CreateSamplerState(&desc, sampler_state_.release_and_get()));
 }
 
-void rv::dx11_renderer::flush_pending_vertices() noexcept
+void rv::dx11_renderer::flush_pending_vertices() noexcept 
 {
-	if (pending_vertices_.empty())
+	if (pending_vertices_.empty()) 
 	{
 		return;
 	}
 
 	D3D11_MAPPED_SUBRESOURCE resource = { };
 
-	if (!try_widen_buffer() || FAILED(context_->Map(buffer_.value(), 0, D3D11_MAP_WRITE_DISCARD, 0, &resource)))
+	if (!try_widen_buffer() || FAILED(context_->Map(buffer_.value(), 0, D3D11_MAP_WRITE_DISCARD, 0, &resource))) 
 	{
 		pending_vertices_.clear();
 
@@ -167,10 +170,23 @@ void rv::dx11_renderer::flush_pending_vertices() noexcept
 
 	context_->IASetVertexBuffers(0, 1, &buffer, &strides, &offsets);
 
-	for (const auto& batch : pending_batches_)
+	for (const auto& batch : pending_batches_) 
 	{
 		const auto texture = std::static_pointer_cast<dx11_texture>(batch.texture);
 		const auto shader = texture->shader_resource();
+
+		if (batch.shader == shader_type::shadow_shader) 
+		{
+			context_->PSSetShader(shadow_pixel_shader_.value(), nullptr, 0);
+		}
+		else if (batch.shader == shader_type::rect_shader) 
+		{
+			context_->PSSetShader(rect_pixel_shader_.value(), nullptr, 0);
+		}
+		else 
+		{
+			context_->PSSetShader(pixel_shader_.value(), nullptr, 0);
+		}
 
 		context_->PSSetShaderResources(0, 1, &shader);
 		context_->Draw(batch.vertex_count, batch.vertex_offset);

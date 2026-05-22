@@ -26,16 +26,17 @@ bool rv::renderer::init()
 	return static_cast<bool>(default_texture_);
 }
 
-void rv::renderer::draw_vertices(const span_t<const vertex> vertices) noexcept 
+void rv::renderer::draw_vertices(const span_t<const vertex> vertices, const shader_type shader) noexcept 
 {
 	if (vertices.empty()) 
 	{
 		return;
 	}
 
-	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture) 
-	{
-		pending_batches_.emplace_back(static_cast<cstd::uint32_t>(pending_vertices_.size()), 0, current_texture_);
+	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture || 
+		pending_batches_.back().shader != shader) {
+		pending_batches_.push_back(vertex_batch{ static_cast<cstd::uint32_t>(pending_vertices_.size()), 0, 
+			current_texture_, shader });
 	}
 
 	auto& current_batch = pending_batches_.back();
@@ -69,39 +70,92 @@ void rv::renderer::draw_rect(const position min, const position max, const color
 	draw_lined_path(col, thickness, true);
 }
 
-void rv::renderer::draw_rect_filled(const position min, const position max, const color col, const float rounding) noexcept 
+void rv::renderer::draw_rect_filled(const position min, const position max, const color col, const float rounding, const rounding_flags flags) noexcept 
 {
-	if (rounding < 0.5f) 
+	const float width = max.x - min.x;
+	const float height = max.y - min.y;
+
+	const float cx = min.x + width * 0.5f;
+	const float cy = min.y + height * 0.5f;
+
+	const float qw = (width * 0.5f) + 1.f;
+	const float qh = (height * 0.5f) + 1.f;
+
+	const position p0 = { cx - qw, cy - qh };
+	const position p1 = { cx + qw, cy + qh };
+
+	const ndc_position n0 = to_ndc(p0);
+	const ndc_position n1 = to_ndc(p1);
+
+	const float rtl = (flags & rounding_flags_top_left) ? rounding : 0.f;
+	const float rtr = (flags & rounding_flags_top_right) ? rounding : 0.f;
+	const float rbr = (flags & rounding_flags_bottom_right) ? rounding : 0.f;
+	const float rbl = (flags & rounding_flags_bottom_left) ? rounding : 0.f;
+
+	const array_t<float, 8> data = { width, height, 0.f, 0.f, rtr, rbr, rbl, rtl };
+
+	const auto make_vertex = [col, data](const float x, const float y, const float u, const float v) -> vertex 
 	{
-		const auto [x0, y0] = to_ndc(min);
-		const auto [x1, y1] = to_ndc(max);
+		return vertex{ .pos = { x, y }, .col = col, .uv = { u, v }, .custom_data = data };
+	};
 
-		const auto make_vertex = [col](const float x, const float y) -> vertex 
-		{
-			return vertex{ .pos = { x, y }, .col = col };
-		};
+	const array_t<vertex, 6> vertices =
+	{
+		make_vertex(n0.x, n0.y, -qw, -qh),
+		make_vertex(n1.x, n0.y,  qw, -qh),
+		make_vertex(n0.x, n1.y, -qw,  qh),
+		make_vertex(n1.x, n0.y,  qw, -qh),
+		make_vertex(n1.x, n1.y,  qw,  qh),
+		make_vertex(n0.x, n1.y, -qw,  qh),
+	};
 
-		const array_t<vertex, 6> vertices =
-		{
-			make_vertex(x0, y0), make_vertex(x1, y0), make_vertex(x0, y1),
-			make_vertex(x1, y0), make_vertex(x1, y1), make_vertex(x0, y1),
-		};
+	draw_vertices(vertices, shader_type::rect_shader);
+}
 
-		draw_vertices(vertices);
+void rv::renderer::draw_shadow_rect(const position min, const position max, const color col, const float rounding, const float shadow_blur, const float shadow_spread, const rounding_flags flags) noexcept 
+{
+	const float width = max.x - min.x;
+	const float height = max.y - min.y;
 
-		return;
-	}
+	const float effective_width = cstd::fmaxf(0.f, width + 2.f * shadow_spread);
+	const float effective_height = cstd::fmaxf(0.f, height + 2.f * shadow_spread);
+	const float effective_rounding = cstd::fmaxf(0.f, rounding + shadow_spread);
 
-	constexpr float pi = cstd::numbers::pi_f;
+	const float cx = min.x + width * 0.5f;
+	const float cy = min.y + height * 0.5f;
 
-	const float r = rounding;
+	const float qw = (effective_width * 0.5f) + shadow_blur;
+	const float qh = (effective_height * 0.5f) + shadow_blur;
 
-	add_arc_path({ min.x + r, min.y + r }, r, pi, pi * 1.5f);
-	add_arc_path({ max.x - r, min.y + r }, r, pi * 1.5f, pi * 2.f);
-	add_arc_path({ max.x - r, max.y - r }, r, 0.f, pi * 0.5f);
-	add_arc_path({ min.x + r, max.y - r }, r, pi * 0.5f, pi);
+	const position p0 = { cx - qw, cy - qh };
+	const position p1 = { cx + qw, cy + qh };
 
-	draw_filled_path(col);
+	const ndc_position n0 = to_ndc(p0);
+	const ndc_position n1 = to_ndc(p1);
+
+	const float rtl = (flags & rounding_flags_top_left) ? effective_rounding : 0.f;
+	const float rtr = (flags & rounding_flags_top_right) ? effective_rounding : 0.f;
+	const float rbr = (flags & rounding_flags_bottom_right) ? effective_rounding : 0.f;
+	const float rbl = (flags & rounding_flags_bottom_left) ? effective_rounding : 0.f;
+
+	const array_t<float, 8> data = { effective_width, effective_height, 0.f, shadow_blur, rtr, rbr, rbl, rtl };
+
+	const auto make_vertex = [col, data](const float x, const float y, const float u, const float v) -> vertex 
+	{
+		return vertex{ .pos = { x, y }, .col = col, .uv = { u, v }, .custom_data = data };
+	};
+
+	const array_t<vertex, 6> vertices =
+	{
+		make_vertex(n0.x, n0.y, -qw, -qh),
+		make_vertex(n1.x, n0.y,  qw, -qh),
+		make_vertex(n0.x, n1.y, -qw,  qh),
+		make_vertex(n1.x, n0.y,  qw, -qh),
+		make_vertex(n1.x, n1.y,  qw,  qh),
+		make_vertex(n0.x, n1.y, -qw,  qh),
+	};
+
+	draw_vertices(vertices, shader_type::shadow_shader);
 }
 
 void rv::renderer::draw_line(const position a, const position b, const color col, const float thickness) noexcept 

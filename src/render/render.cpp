@@ -296,7 +296,7 @@ rv::position rv::renderer::calc_text_size(const font& font, const string_view_t 
 	return { width, font.baked_size() * scale };
 }
 
-optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> bytes, const float pixel_height, const cstd::uint32_t min_char, const cstd::uint32_t max_char) 
+optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> bytes, const float pixel_height, const cstd::uint32_t min_char, const cstd::uint32_t max_char, const bool anti_aliased) 
 {
 #ifdef RV_USE_FREETYPE
 	FT_Library library = nullptr;
@@ -342,7 +342,8 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 	{
 		const cstd::uint32_t c = min_char + static_cast<cstd::uint32_t>(i);
 
-		if (FT_Load_Char(face, c, FT_LOAD_RENDER)) 
+		const cstd::int32_t load_flags = anti_aliased ? FT_LOAD_RENDER : (FT_LOAD_RENDER | FT_LOAD_TARGET_MONO);
+		if (FT_Load_Char(face, c, load_flags)) 
 		{
 			continue;
 		}
@@ -370,7 +371,16 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 		{
 			for (cstd::uint32_t col = 0; col < bitmap->width; col++) 
 			{
-				coverage[(pen_y + row) * width + (pen_x + col)] = bitmap->buffer[row * bitmap->pitch + col];
+				if (bitmap->pixel_mode == FT_PIXEL_MODE_MONO)
+				{
+					const cstd::uint8_t byte = bitmap->buffer[row * bitmap->pitch + (col / 8)];
+					const bool bit = (byte & (1 << (7 - (col % 8)))) != 0;
+					coverage[(pen_y + row) * width + (pen_x + col)] = bit ? 0xFF : 0;
+				}
+				else
+				{
+					coverage[(pen_y + row) * width + (pen_x + col)] = bitmap->buffer[row * bitmap->pitch + col];
+				}
 			}
 		}
 
@@ -444,6 +454,14 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 		return { };
 	}
 
+	if (!anti_aliased)
+	{
+		for (cstd::size_t i = 0; i < coverage.size(); i++)
+		{
+			coverage[i] = coverage[i] > 127 ? 0xFF : 0;
+		}
+	}
+
 	vector_t<cstd::uint8_t> rgba(static_cast<cstd::size_t>(width) * height * 4, 0);
 
 	for (cstd::size_t i = 0; i < coverage.size(); i++) {
@@ -480,11 +498,11 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 #endif
 }
 
-optional_t<rv::font> rv::renderer::add_font(const string_t& path, const float pixel_height, const cstd::uint32_t min_char, const cstd::uint32_t max_char) 
+optional_t<rv::font> rv::renderer::add_font(const string_t& path, const float pixel_height, const cstd::uint32_t min_char, const cstd::uint32_t max_char, const bool anti_aliased) 
 {
 	const vector_t<std::uint8_t> buffer = read_file(path);
 
-	return add_font(buffer, pixel_height, min_char, max_char);
+	return add_font(buffer, pixel_height, min_char, max_char, anti_aliased);
 }
 
 void rv::renderer::add_path_point(const position pos) 

@@ -79,6 +79,19 @@ void rv::renderer::begin_frame(const vector_2d<float> display_size) noexcept
 	begin_frame_backend(display_size);
 }
 
+void rv::renderer::push_clip_rect(const position min, const position max) noexcept
+{
+	clip_rects_.push_back({ min, max });
+}
+
+void rv::renderer::pop_clip_rect() noexcept
+{
+	if (!clip_rects_.empty())
+	{
+		clip_rects_.pop_back();
+	}
+}
+
 void rv::renderer::draw_vertices(const span_t<const vertex> vertices, const shader_type shader) noexcept 
 {
 	if (vertices.empty()) 
@@ -86,10 +99,12 @@ void rv::renderer::draw_vertices(const span_t<const vertex> vertices, const shad
 		return;
 	}
 
+	const optional_t<rect> current_clip = clip_rects_.empty() ? optional_t<rect>() : clip_rects_.back();
+
 	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture || 
-		pending_batches_.back().shader != shader) {
+		pending_batches_.back().shader != shader || pending_batches_.back().clip_rect != current_clip) {
 		pending_batches_.push_back(vertex_batch{ static_cast<cstd::uint32_t>(pending_vertices_.size()), 0, 
-			static_cast<cstd::uint32_t>(pending_indices_.size()), 0, current_texture_, shader });
+			static_cast<cstd::uint32_t>(pending_indices_.size()), 0, current_texture_, shader, current_clip });
 	}
 
 	auto& current_batch = pending_batches_.back();
@@ -113,11 +128,13 @@ void rv::renderer::draw_indexed_vertices(const span_t<const vertex> vertices, co
 		return;
 	}
 
+	const optional_t<rect> current_clip = clip_rects_.empty() ? optional_t<rect>() : clip_rects_.back();
+
 	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture || 
-		pending_batches_.back().shader != shader) 
+		pending_batches_.back().shader != shader || pending_batches_.back().clip_rect != current_clip) 
 	{
 		pending_batches_.push_back(vertex_batch{ static_cast<cstd::uint32_t>(pending_vertices_.size()), 0, 
-			static_cast<cstd::uint32_t>(pending_indices_.size()), 0, current_texture_, shader });
+			static_cast<cstd::uint32_t>(pending_indices_.size()), 0, current_texture_, shader, current_clip });
 	}
 
 	auto& current_batch = pending_batches_.back();

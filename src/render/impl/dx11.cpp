@@ -63,6 +63,17 @@ bool rv::dx11_renderer::init_backend() noexcept
 		return false;
 	}
 
+	D3D11_RASTERIZER_DESC rasterizer_desc = { };
+	rasterizer_desc.FillMode = D3D11_FILL_SOLID;
+	rasterizer_desc.CullMode = D3D11_CULL_BACK;
+	rasterizer_desc.ScissorEnable = TRUE;
+	rasterizer_desc.DepthClipEnable = TRUE;
+
+	if (FAILED(device_->CreateRasterizerState(&rasterizer_desc, rasterizer_state_.release_and_get())))
+	{
+		return false;
+	}
+
 	return create_sampler();
 }
 
@@ -138,6 +149,7 @@ void rv::dx11_renderer::begin_frame_backend(const vector_2d<float> display_size)
 	viewport.MaxDepth = 1.f;
 
 	context_->RSSetViewports(1, &viewport);
+	context_->RSSetState(rasterizer_state_.value());
 	context_->IASetInputLayout(input_layout_.value());
 
 	context_->VSSetShader(vertex_shader_.value(), nullptr, 0);
@@ -231,6 +243,26 @@ void rv::dx11_renderer::flush_pending_vertices() noexcept
 		}
 
 		context_->PSSetShaderResources(0, 1, &shader);
+
+		if (batch.clip_rect.has_value())
+		{
+			D3D11_RECT rect;
+			rect.left = static_cast<LONG>(batch.clip_rect->min.x);
+			rect.top = static_cast<LONG>(batch.clip_rect->min.y);
+			rect.right = static_cast<LONG>(batch.clip_rect->max.x);
+			rect.bottom = static_cast<LONG>(batch.clip_rect->max.y);
+			context_->RSSetScissorRects(1, &rect);
+		}
+		else
+		{
+			D3D11_RECT rect;
+			rect.left = 0;
+			rect.top = 0;
+			rect.right = static_cast<LONG>(state_.display_size.x);
+			rect.bottom = static_cast<LONG>(state_.display_size.y);
+			context_->RSSetScissorRects(1, &rect);
+		}
+
 		context_->DrawIndexed(batch.index_count, batch.index_offset, batch.vertex_offset);
 	}
 

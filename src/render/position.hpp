@@ -25,4 +25,19 @@ namespace rv
 	{
 
 	};
+
+	struct rect
+	{
+		position min, max;
+
+		bool operator==(const rect& other) const
+		{
+			return min == other.min && max == other.max;
+		}
+
+		bool operator!=(const rect& other) const
+		{
+			return !(*this == other);
+		}
+	};
 }

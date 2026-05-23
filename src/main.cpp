@@ -209,6 +209,26 @@ cstd::int32_t main()
 			renderer->draw_filled_path({ 1.f, 1.f, 1.f, 0.6f });
 		}
 
+		// clip rect example
+		const rv::position clip_min = { 400.f, 100.f };
+		const rv::position clip_max = { 600.f, 250.f };
+
+		const float bounce_x = 500.f + std::sinf(renderer->state().time * 3.f) * 150.f;
+
+		// push the clip rect, draw the circle, and pop it
+		renderer->push_clip_rect(clip_min, clip_max);
+		renderer->draw_circle_filled({ bounce_x, 175.f }, 40.f, { 1.f, 0.5f, 0.f, 1.f });
+		
+		if (font)
+		{
+			constexpr float text_size = 18.f;
+			const string_t circle_text = "Clipped!";
+			const rv::position text_dim = renderer->calc_text_size(*font, circle_text, text_size);
+			renderer->draw_text(*font, { bounce_x - text_dim.x / 2.f, 175.f - text_dim.y / 2.f }, circle_text, { 1.f, 1.f, 1.f, 1.f }, text_size);
+		}
+		
+		renderer->pop_clip_rect();
+
 		if (font)
 		{
 			const auto state = renderer->state();

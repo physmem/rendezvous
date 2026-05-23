@@ -54,6 +54,7 @@ namespace rv
 		cstd::uint32_t index_count;
 		shared_ptr_t<texture> texture;
 		shader_type shader;
+		optional_t<rect> clip_rect;
 	};
 
 	struct state
@@ -71,6 +72,9 @@ namespace rv
 
 		void begin_frame(vector_2d<float> display_size) noexcept;
 		virtual void end_frame() noexcept = 0;
+
+		void push_clip_rect(position min, position max) noexcept;
+		void pop_clip_rect() noexcept;
 
 		void draw_vertices(span_t<const vertex> vertices, shader_type shader = shader_type::default_shader) noexcept;
 		void draw_indexed_vertices(span_t<const vertex> vertices, span_t<const cstd::uint32_t> indices, shader_type shader = shader_type::default_shader) noexcept;
@@ -122,6 +126,7 @@ namespace rv
 		vector_t<vertex> pending_vertices_ = { };
 		vector_t<cstd::uint32_t> pending_indices_ = { };
 		vector_t<vertex_batch> pending_batches_ = { };
+		vector_t<rect> clip_rects_ = { };
 		shared_ptr_t<texture> current_texture_ = { };
 		shared_ptr_t<texture> default_texture_ = { };
 

@@ -74,7 +74,7 @@ bool rv::win32_input::handle_message(const HWND hwnd, const UINT msg, const WPAR
 	case WM_SETCURSOR:
 		if (LOWORD(lparam) == HTCLIENT)
 		{
-			if (current_cursor_ == cursor_type::none || draw_mouse_cursor)
+			if (current_cursor_ == cursor_type::none)
 			{
 				::SetCursor(NULL);
 			}

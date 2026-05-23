@@ -106,6 +106,7 @@ namespace rv
 
 		void end_frame() noexcept override;
 		shared_ptr_t<texture> create_texture(span_t<const cstd::uint8_t> buffer, cstd::uint32_t width, cstd::uint32_t height) override;
+		shared_ptr_t<texture> create_texture_from_srv(void* srv) override;
 
 	protected:
 		bool create_sampler() noexcept;

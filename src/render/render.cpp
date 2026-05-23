@@ -72,6 +72,7 @@ void rv::renderer::begin_frame(const vector_2d<float> display_size) noexcept
 
 	state_.delta_time = cstd::get_time_diff(current_time, state_.last_time);
 	state_.time += state_.delta_time;
+	state_.frame_rate = state_.delta_time > 0.f ? (1.f / state_.delta_time) : 0.f;
 
 	state_.last_time = current_time;
 	state_.display_size = display_size;
@@ -326,12 +327,12 @@ void rv::renderer::draw_shadow_circle(const position pos, const float radius, co
 	draw_vertices(vertices, shader_type::shadow_shader);
 }
 
-void rv::renderer::draw_image(const shared_ptr_t<texture> tex, const position min, const position max, const color tint) noexcept 
+void rv::renderer::draw_image(const shared_ptr_t<texture> tex, const position min, const position max, const position uv_min, const position uv_max, const color tint) noexcept 
 {
-	draw_image_rounded(tex, min, max, 0.f, rounding_flags_all, tint);
+	draw_image_rounded(tex, min, max, 0.f, rounding_flags_all, uv_min, uv_max, tint);
 }
 
-void rv::renderer::draw_image_rounded(const shared_ptr_t<texture> tex, const position min, const position max, const float rounding, const rounding_flags flags, const color tint) noexcept 
+void rv::renderer::draw_image_rounded(const shared_ptr_t<texture> tex, const position min, const position max, const float rounding, const rounding_flags flags, const position uv_min, const position uv_max, const color tint) noexcept 
 {
 	const float width = max.x - min.x;
 	const float height = max.y - min.y;
@@ -360,24 +361,30 @@ void rv::renderer::draw_image_rounded(const shared_ptr_t<texture> tex, const pos
 
 	const array_t<float, 8> data = { width, height, 0.f, 0.f, rtr, rbr, rbl, rtl };
 
-	const float u0 = -1.f / width;
-	const float u1 = 1.f + 1.f / width;
-	const float v0 = -1.f / height;
-	const float v1 = 1.f + 1.f / height;
+	const float du = uv_max.x - uv_min.x;
+	const float dv = uv_max.y - uv_min.y;
 
-	const auto make_vertex = [tint, data](const float x, const float y, const float u, const float v) -> vertex 
+	const float u0 = uv_min.x + (-1.f / width) * du;
+	const float u1 = uv_min.x + (1.f + 1.f / width) * du;
+	const float v0 = uv_min.y + (-1.f / height) * dv;
+	const float v1 = uv_min.y + (1.f + 1.f / height) * dv;
+
+	const auto make_vertex = [tint, data](const float x, const float y, const float u, const float v, const float px, const float py) -> vertex 
 	{
-		return vertex{ .pos = { x, y }, .col = tint, .uv = { u, v }, .custom_data = data };
+		auto d = data;
+		d[2] = px;
+		d[3] = py;
+		return vertex{ .pos = { x, y }, .col = tint, .uv = { u, v }, .custom_data = d };
 	};
 
 	const array_t<vertex, 6> vertices =
 	{
-		make_vertex(n0.x, n0.y, u0, v0),
-		make_vertex(n1.x, n0.y, u1, v0),
-		make_vertex(n0.x, n1.y, u0, v1),
-		make_vertex(n1.x, n0.y, u1, v0),
-		make_vertex(n1.x, n1.y, u1, v1),
-		make_vertex(n0.x, n1.y, u0, v1),
+		make_vertex(n0.x, n0.y, u0, v0, -qw, -qh),
+		make_vertex(n1.x, n0.y, u1, v0,  qw, -qh),
+		make_vertex(n0.x, n1.y, u0, v1, -qw,  qh),
+		make_vertex(n1.x, n0.y, u1, v0,  qw, -qh),
+		make_vertex(n1.x, n1.y, u1, v1,  qw,  qh),
+		make_vertex(n0.x, n1.y, u0, v1, -qw,  qh),
 	};
 
 	current_texture_ = tex;
@@ -686,6 +693,16 @@ cstd::size_t rv::renderer::vertex_count() const noexcept
 	return pending_vertices_.size();
 }
 
+span_t<rv::vertex> rv::renderer::get_vertices() noexcept
+{
+	return span_t<rv::vertex>(pending_vertices_);
+}
+
+span_t<const rv::vertex> rv::renderer::get_vertices() const noexcept
+{
+	return span_t<const rv::vertex>(pending_vertices_);
+}
+
 void rv::renderer::modify_alpha(const cstd::size_t start_idx, const cstd::size_t end_idx, const float alpha) noexcept
 {
 	if (alpha >= 1.0f)
@@ -696,6 +713,30 @@ void rv::renderer::modify_alpha(const cstd::size_t start_idx, const cstd::size_t
 	for (cstd::size_t i = start_idx; i < end_idx && i < pending_vertices_.size(); i++)
 	{
 		pending_vertices_[i].col.a *= alpha;
+	}
+}
+
+void rv::renderer::modify_color(const cstd::size_t start_idx, const cstd::size_t end_idx, const color col) noexcept
+{
+	for (cstd::size_t i = start_idx; i < end_idx && i < pending_vertices_.size(); i++)
+	{
+		pending_vertices_[i].col = col;
+	}
+}
+
+void rv::renderer::modify_scale(const cstd::size_t start_idx, const cstd::size_t end_idx, const position center, const float scale) noexcept
+{
+	if (scale == 1.f)
+	{
+		return;
+	}
+
+	const ndc_position center_ndc = to_ndc(center);
+
+	for (cstd::size_t i = start_idx; i < end_idx && i < pending_vertices_.size(); i++)
+	{
+		pending_vertices_[i].pos.x = center_ndc.x + (pending_vertices_[i].pos.x - center_ndc.x) * scale;
+		pending_vertices_[i].pos.y = center_ndc.y + (pending_vertices_[i].pos.y - center_ndc.y) * scale;
 	}
 }
 

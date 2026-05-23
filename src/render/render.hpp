@@ -1,5 +1,6 @@
 #pragma once
 #include "position.hpp"
+#include "../input/input.hpp"
 
 // define this to use freetype font rendering
 // #define RV_USE_FREETYPE
@@ -63,6 +64,7 @@ namespace rv
 		vector_2d<float> display_size = { };
 		float time = 0.f;
 		float delta_time = 0.f;
+		float frame_rate = 0.f;
 		time_point_t last_time = { };
 	};
 
@@ -94,8 +96,10 @@ namespace rv
 
 		void draw_shadow_circle(position pos, float radius, color col, float shadow_blur, bool cut_background = false) noexcept;
 
-		void draw_image(shared_ptr_t<texture> tex, position min, position max, color tint = { 1.f, 1.f, 1.f, 1.f }) noexcept;
-		void draw_image_rounded(shared_ptr_t<texture> tex, position min, position max, float rounding, rounding_flags flags = rounding_flags_all, color tint = { 1.f, 1.f, 1.f, 1.f }) noexcept;
+		void draw_image(shared_ptr_t<texture> tex, position min, position max, position uv_min = { 0.f, 0.f }, position uv_max = { 1.f, 1.f }, color tint = { 1.f, 1.f, 1.f, 1.f }) noexcept;
+		void draw_image_rounded(shared_ptr_t<texture> tex, position min, position max, float rounding, rounding_flags flags = rounding_flags_all, position uv_min = { 0.f, 0.f }, position uv_max = { 1.f, 1.f }, color tint = { 1.f, 1.f, 1.f, 1.f }) noexcept;
+
+		void draw_mouse_cursor(position pos, cursor_type type, float size_multiplier = 1.f) noexcept;
 
 		void draw_text(const font& font, position pos, string_view_t text, color col, float size = 0.f) noexcept;
 		[[nodiscard]] position calc_text_size(const font& font, string_view_t text, float size = 0.f) const noexcept;
@@ -116,9 +120,14 @@ namespace rv
 		[[nodiscard]] const struct state& state() const noexcept;
 
 		[[nodiscard]] cstd::size_t vertex_count() const noexcept;
+		[[nodiscard]] span_t<vertex> get_vertices() noexcept;
+		[[nodiscard]] span_t<const vertex> get_vertices() const noexcept;
 		void modify_alpha(cstd::size_t start_idx, cstd::size_t end_idx, float alpha) noexcept;
+		void modify_color(cstd::size_t start_idx, cstd::size_t end_idx, color col) noexcept;
+		void modify_scale(cstd::size_t start_idx, cstd::size_t end_idx, position center, float scale) noexcept;
 
 		virtual shared_ptr_t<texture> create_texture(span_t<const cstd::uint8_t> buffer, cstd::uint32_t width, cstd::uint32_t height) = 0;
+		virtual shared_ptr_t<texture> create_texture_from_srv(void* srv) = 0;
 
 	protected:
 		virtual bool init_backend() noexcept = 0;

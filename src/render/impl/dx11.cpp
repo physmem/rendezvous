@@ -311,3 +311,22 @@ shared_ptr_t<rv::texture> rv::dx11_renderer::create_texture(const span_t<const c
 
 	return cstd::make_shared<dx11_texture>(this, cstd::move(texture_2d), cstd::move(shader_resource));
 }
+
+shared_ptr_t<rv::texture> rv::dx11_renderer::create_texture_from_srv(void* raw_srv)
+{
+	auto* srv = static_cast<ID3D11ShaderResourceView*>(raw_srv);
+	if (!srv)
+	{
+		return { };
+	}
+
+	srv->AddRef();
+
+	dx11_object<ID3D11Texture2D> empty_texture = { };
+	dx11_object<ID3D11ShaderResourceView> shader_resource = { };
+
+	*shader_resource.release_and_get() = srv;
+
+	return cstd::make_shared<dx11_texture>(this, cstd::move(empty_texture), cstd::move(shader_resource));
+}
+

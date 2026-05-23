@@ -70,6 +70,35 @@ bool rv::win32_input::handle_message(const HWND hwnd, const UINT msg, const WPAR
 		state_.mouse_pos.x = static_cast<float>(GET_X_LPARAM(lparam));
 		state_.mouse_pos.y = static_cast<float>(GET_Y_LPARAM(lparam));
 		return true;
+		
+	case WM_SETCURSOR:
+		if (LOWORD(lparam) == HTCLIENT)
+		{
+			if (current_cursor_ == cursor_type::none || draw_mouse_cursor)
+			{
+				::SetCursor(NULL);
+			}
+			else
+			{
+				LPTSTR win32_cursor = IDC_ARROW;
+				switch (current_cursor_)
+				{
+				case cursor_type::arrow:        win32_cursor = IDC_ARROW; break;
+				case cursor_type::text_input:   win32_cursor = IDC_IBEAM; break;
+				case cursor_type::resize_all:   win32_cursor = IDC_SIZEALL; break;
+				case cursor_type::resize_ns:    win32_cursor = IDC_SIZENS; break;
+				case cursor_type::resize_ew:    win32_cursor = IDC_SIZEWE; break;
+				case cursor_type::resize_nesw:  win32_cursor = IDC_SIZENESW; break;
+				case cursor_type::resize_nwse:  win32_cursor = IDC_SIZENWSE; break;
+				case cursor_type::hand:         win32_cursor = IDC_HAND; break;
+				case cursor_type::not_allowed:  win32_cursor = IDC_NO; break;
+				default:                        win32_cursor = IDC_ARROW; break;
+				}
+				::SetCursor(::LoadCursor(NULL, win32_cursor));
+			}
+			return true;
+		}
+		return false;
 	}
 
 	return false;

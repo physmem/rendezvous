@@ -100,7 +100,7 @@ float4 image_pixel_shader(ps_input input) : SV_TARGET
     float2 rect_size = input.custom_data.xy;
     float4 radii = input.custom_data2;
 
-    float2 p = (input.uv - 0.5f) * rect_size;
+    float2 p = input.custom_data.zw;
     
     float d = sd_round_rect(p, rect_size * 0.5f, radii);
     

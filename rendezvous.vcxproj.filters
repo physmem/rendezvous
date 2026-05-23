@@ -15,7 +15,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="src\backend\win32.cpp">
+    <ClCompile Include="src\input\win32.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="src\main.cpp">
@@ -32,7 +32,7 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\backend\win32.hpp">
+    <ClInclude Include="src\input\win32.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\log\log.hpp">
@@ -60,6 +60,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="src\util\file.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\input\input.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="src\util\triangulate.hpp">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

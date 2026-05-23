@@ -1,9 +1,10 @@
 #include "log/log.hpp"
 #include "render/impl/dx11.hpp"
-#include "backend/win32.hpp"
+#include "input/win32.hpp"
 #include "util/types.hpp"
 
 rv::vector_2d<float> screen_size = { 1280.f, 720.f };
+unique_ptr_t<rv::win32_input> input = { };
 
 static LRESULT CALLBACK wnd_proc(const HWND hwnd, const UINT msg, const WPARAM wparam, const LPARAM lparam)
 {
@@ -13,7 +14,7 @@ static LRESULT CALLBACK wnd_proc(const HWND hwnd, const UINT msg, const WPARAM w
 		screen_size.y = static_cast<float>(HIWORD(lparam));
 	}
 
-	rv::backend::win32::handle_message(hwnd, msg, wparam, lparam);
+	input->handle_message(hwnd, msg, wparam, lparam);
 
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
@@ -85,6 +86,8 @@ cstd::int32_t main()
 		return 1;
 	}
 
+	input = cstd::make_unique<rv::win32_input>();
+
 	rv::vector_2d<float> last_screen_size = screen_size;
 
 	const auto font = renderer->add_font("C:\\Windows\\Fonts\\arial.ttf", 32.f);
@@ -153,8 +156,8 @@ cstd::int32_t main()
 		renderer->draw_shadow_rect({ 400.f, 350.f }, { 600.f, 500.f }, { 0.f, 0.f, 0.f, 0.6f }, 30.f, 25.f, 0.f, selective_flags);
 		renderer->draw_rect_filled({ 400.f, 350.f }, { 600.f, 500.f }, { 0.f, 1.f, 0.f, 1.f }, 30.f, selective_flags);
 
-		const auto mouse_pos = rv::backend::win32::get_mouse_pos();
-		if (rv::backend::win32::is_mouse_down(0))
+		const auto mouse_pos = input->mouse_pos();
+		if (input->is_mouse_down(0))
 		{
 			renderer->draw_circle_filled({ mouse_pos.x, mouse_pos.y }, 25.f, { 1.f, 1.f, 1.f, 0.5f });
 		}
@@ -165,7 +168,7 @@ cstd::int32_t main()
 
 		// win32 scroll example
 		static float cumulative_scroll = 0.f;
-		cumulative_scroll += rv::backend::win32::get_scroll_delta();
+		cumulative_scroll += input->scroll_delta();
 	
 		if (cumulative_scroll > 10.f) cumulative_scroll = 10.f;
 		if (cumulative_scroll < -10.f) cumulative_scroll = -10.f;
@@ -206,7 +209,7 @@ cstd::int32_t main()
 
 		swap_chain->Present(1, 0);
 
-		rv::backend::win32::update();
+		input->reset();
 	} while (msg.message != WM_QUIT);
 
 	return 0;

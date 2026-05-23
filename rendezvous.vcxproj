@@ -144,7 +144,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="src\backend\win32.cpp" />
+    <ClCompile Include="src\input\win32.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\render\impl\dx11.cpp" />
     <ClCompile Include="src\render\render.cpp" />
@@ -153,7 +153,8 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="src\backend\win32.hpp" />
+    <ClInclude Include="src\input\input.hpp" />
+    <ClInclude Include="src\input\win32.hpp" />
     <ClInclude Include="src\log\log.hpp" />
     <ClInclude Include="src\render\impl\dx11.hpp" />
     <ClInclude Include="src\render\position.hpp" />
@@ -162,6 +163,7 @@
     <ClInclude Include="src\render\texture.hpp" />
     <ClInclude Include="src\util\file.hpp" />
     <ClInclude Include="src\util\math.hpp" />
+    <ClInclude Include="src\util\triangulate.hpp" />
     <ClInclude Include="src\util\types.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

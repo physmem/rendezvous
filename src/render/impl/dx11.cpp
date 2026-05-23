@@ -27,7 +27,8 @@ bool rv::dx11_renderer::init_backend() noexcept
 	if (FAILED(device_->CreateVertexShader(d3d11_vertex_shader.data(), d3d11_vertex_shader.size(), nullptr, vertex_shader_.release_and_get())) ||
 		FAILED(device_->CreatePixelShader(d3d11_pixel_shader.data(), d3d11_pixel_shader.size(), nullptr, pixel_shader_.release_and_get())) ||
 		FAILED(device_->CreatePixelShader(d3d11_shadow_pixel_shader.data(), d3d11_shadow_pixel_shader.size(), nullptr, shadow_pixel_shader_.release_and_get())) ||
-		FAILED(device_->CreatePixelShader(d3d11_rect_pixel_shader.data(), d3d11_rect_pixel_shader.size(), nullptr, rect_pixel_shader_.release_and_get()))) {
+		FAILED(device_->CreatePixelShader(d3d11_rect_pixel_shader.data(), d3d11_rect_pixel_shader.size(), nullptr, rect_pixel_shader_.release_and_get())) ||
+		FAILED(device_->CreatePixelShader(d3d11_image_pixel_shader.data(), d3d11_image_pixel_shader.size(), nullptr, image_pixel_shader_.release_and_get()))) {
 		return false;
 	}
 
@@ -236,6 +237,10 @@ void rv::dx11_renderer::flush_pending_vertices() noexcept
 		else if (batch.shader == shader_type::rect_shader) 
 		{
 			context_->PSSetShader(rect_pixel_shader_.value(), nullptr, 0);
+		}
+		else if (batch.shader == shader_type::image_shader)
+		{
+			context_->PSSetShader(image_pixel_shader_.value(), nullptr, 0);
 		}
 		else 
 		{

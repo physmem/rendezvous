@@ -94,3 +94,18 @@ float4 shadow_pixel_shader(ps_input input) : SV_TARGET
     
     return float4(input.color.rgb, input.color.a * alpha);
 }
+
+float4 image_pixel_shader(ps_input input) : SV_TARGET
+{
+    float2 rect_size = input.custom_data.xy;
+    float4 radii = input.custom_data2;
+
+    float2 p = (input.uv - 0.5f) * rect_size;
+    
+    float d = sd_round_rect(p, rect_size * 0.5f, radii);
+    
+    float alpha = saturate(0.5f - d);
+    
+    float4 tex_color = textr.Sample(samplr, input.uv);
+    return float4(tex_color.rgb * input.color.rgb, tex_color.a * input.color.a * alpha);
+}

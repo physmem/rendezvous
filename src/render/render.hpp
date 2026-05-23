@@ -43,7 +43,8 @@ namespace rv
 	{
 		default_shader,
 		shadow_shader,
-		rect_shader
+		rect_shader,
+		image_shader
 	};
 
 	struct vertex_batch 
@@ -93,6 +94,9 @@ namespace rv
 
 		void draw_shadow_circle(position pos, float radius, color col, float shadow_blur, bool cut_background = false) noexcept;
 
+		void draw_image(shared_ptr_t<texture> tex, position min, position max, color tint = { 1.f, 1.f, 1.f, 1.f }) noexcept;
+		void draw_image_rounded(shared_ptr_t<texture> tex, position min, position max, float rounding, rounding_flags flags = rounding_flags_all, color tint = { 1.f, 1.f, 1.f, 1.f }) noexcept;
+
 		void draw_text(const font& font, position pos, string_view_t text, color col, float size = 0.f) noexcept;
 		[[nodiscard]] position calc_text_size(const font& font, string_view_t text, float size = 0.f) const noexcept;
 
@@ -111,11 +115,15 @@ namespace rv
 		[[nodiscard]] state& state() noexcept;
 		[[nodiscard]] const struct state& state() const noexcept;
 
+		[[nodiscard]] cstd::size_t vertex_count() const noexcept;
+		void modify_alpha(cstd::size_t start_idx, cstd::size_t end_idx, float alpha) noexcept;
+
+		virtual shared_ptr_t<texture> create_texture(span_t<const cstd::uint8_t> buffer, cstd::uint32_t width, cstd::uint32_t height) = 0;
+
 	protected:
 		virtual bool init_backend() noexcept = 0;
 		virtual void begin_frame_backend(vector_2d<float> display_size) noexcept = 0;
 		virtual void flush_pending_vertices() noexcept = 0;
-		virtual shared_ptr_t<texture> create_texture(span_t<const cstd::uint8_t> buffer, cstd::uint32_t width, cstd::uint32_t height) = 0;
 
 		void add_circle_path(position pos, float radius, cstd::size_t segment_count) noexcept;
 

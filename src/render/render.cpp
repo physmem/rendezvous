@@ -326,6 +326,65 @@ void rv::renderer::draw_shadow_circle(const position pos, const float radius, co
 	draw_vertices(vertices, shader_type::shadow_shader);
 }
 
+void rv::renderer::draw_image(const shared_ptr_t<texture> tex, const position min, const position max, const color tint) noexcept 
+{
+	draw_image_rounded(tex, min, max, 0.f, rounding_flags_all, tint);
+}
+
+void rv::renderer::draw_image_rounded(const shared_ptr_t<texture> tex, const position min, const position max, const float rounding, const rounding_flags flags, const color tint) noexcept 
+{
+	const float width = max.x - min.x;
+	const float height = max.y - min.y;
+
+	if (!tex || width <= 0.f || height <= 0.f)
+	{
+		return;
+	}
+
+	const float cx = min.x + width * 0.5f;
+	const float cy = min.y + height * 0.5f;
+
+	const float qw = (width * 0.5f) + 1.f;
+	const float qh = (height * 0.5f) + 1.f;
+
+	const position p0 = { cx - qw, cy - qh };
+	const position p1 = { cx + qw, cy + qh };
+
+	const ndc_position n0 = to_ndc(p0);
+	const ndc_position n1 = to_ndc(p1);
+
+	const float rtl = (flags & rounding_flags_top_left) ? rounding : 0.f;
+	const float rtr = (flags & rounding_flags_top_right) ? rounding : 0.f;
+	const float rbr = (flags & rounding_flags_bottom_right) ? rounding : 0.f;
+	const float rbl = (flags & rounding_flags_bottom_left) ? rounding : 0.f;
+
+	const array_t<float, 8> data = { width, height, 0.f, 0.f, rtr, rbr, rbl, rtl };
+
+	const float u0 = -1.f / width;
+	const float u1 = 1.f + 1.f / width;
+	const float v0 = -1.f / height;
+	const float v1 = 1.f + 1.f / height;
+
+	const auto make_vertex = [tint, data](const float x, const float y, const float u, const float v) -> vertex 
+	{
+		return vertex{ .pos = { x, y }, .col = tint, .uv = { u, v }, .custom_data = data };
+	};
+
+	const array_t<vertex, 6> vertices =
+	{
+		make_vertex(n0.x, n0.y, u0, v0),
+		make_vertex(n1.x, n0.y, u1, v0),
+		make_vertex(n0.x, n1.y, u0, v1),
+		make_vertex(n1.x, n0.y, u1, v0),
+		make_vertex(n1.x, n1.y, u1, v1),
+		make_vertex(n0.x, n1.y, u0, v1),
+	};
+
+	current_texture_ = tex;
+	draw_vertices(vertices, shader_type::image_shader);
+	current_texture_ = default_texture_;
+}
+
 void rv::renderer::draw_text(const font& font, const position pos, const string_view_t text, const color col,
 							 const float size) noexcept 
 {
@@ -620,6 +679,24 @@ rv::state& rv::renderer::state() noexcept
 const rv::state& rv::renderer::state() const noexcept
 {
 	return state_;
+}
+
+cstd::size_t rv::renderer::vertex_count() const noexcept
+{
+	return pending_vertices_.size();
+}
+
+void rv::renderer::modify_alpha(const cstd::size_t start_idx, const cstd::size_t end_idx, const float alpha) noexcept
+{
+	if (alpha >= 1.0f)
+	{
+		return;
+	}
+
+	for (cstd::size_t i = start_idx; i < end_idx && i < pending_vertices_.size(); i++)
+	{
+		pending_vertices_[i].col.a *= alpha;
+	}
 }
 
 void rv::renderer::add_path_point(const position pos) 

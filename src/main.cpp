@@ -3,6 +3,10 @@
 #include "input/win32.hpp"
 #include "util/types.hpp"
 
+// uncomment this if you want to try the example image rendering
+// #define STB_IMAGE_IMPLEMENTATION
+// #include <stb_image.h>
+
 rv::vector_2d<float> screen_size = { 1280.f, 720.f };
 unique_ptr_t<rv::win32_input> input = { };
 
@@ -85,6 +89,14 @@ cstd::int32_t main()
 
 		return 1;
 	}
+
+	// example image loading using stb image
+	// cstd::int32_t img_w, img_h, img_c;
+	// unsigned char* img_data = stbi_load("images/landing.png", &img_w, &img_h, &img_c, 4);
+	// auto logo_tex = img_data ? renderer->create_texture(span_t<const cstd::uint8_t>(img_data, img_w * img_h * 4), img_w, img_h) : nullptr;
+	// if (img_data) stbi_image_free(img_data);
+	// img_w /= 2;
+	// img_h /= 2;
 
 	input = cstd::make_unique<rv::win32_input>();
 
@@ -228,6 +240,12 @@ cstd::int32_t main()
 		}
 		
 		renderer->pop_clip_rect();
+
+		// if (logo_tex)
+		// {
+		// 	renderer->draw_image_rounded(logo_tex, { 50.f, 50.f }, {  (float)img_w, (float)img_h }, 30.f);
+		// 	renderer->draw_rect({ 50.f, 50.f }, { (float)img_w, (float)img_h }, { 1.f, 1.f, 1.f, 0.5f }, 2.f, 30.f);
+		// }
 
 		if (font)
 		{

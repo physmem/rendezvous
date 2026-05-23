@@ -78,6 +78,11 @@ namespace cstd
 		return std::sinf(x);
 	}
 
+	inline float atan2f(const float y, const float x)
+	{
+		return std::atan2f(y, x);
+	}
+
 	inline float fminf(const float x, const float y)
 	{
 		return std::fminf(x, y);

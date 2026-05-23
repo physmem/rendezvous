@@ -254,6 +254,14 @@ void rv::renderer::draw_line(const position a, const position b, const color col
 	draw_lined_path(col, thickness, false);
 }
 
+void rv::renderer::draw_shadow_line(const position a, const position b, const color col, const float thickness, const float shadow_blur) noexcept 
+{
+	add_path_point(a);
+	add_path_point(b);
+
+	draw_shadow_lined_path(col, thickness, shadow_blur, false);
+}
+
 void rv::renderer::draw_circle(const position pos, const float radius, const color col, const float thickness,
 							   const cstd::size_t segment_count) noexcept 
 {
@@ -268,6 +276,37 @@ void rv::renderer::draw_circle_filled(const position pos, const float radius, co
 	add_circle_path(pos, radius, segment_count);
 
 	draw_filled_path(col);
+}
+
+void rv::renderer::draw_shadow_circle(const position pos, const float radius, const color col, const float shadow_blur, const bool cut_background) noexcept 
+{
+	const float qw = radius + shadow_blur;
+	const float qh = radius + shadow_blur;
+
+	const position p0 = { pos.x - qw, pos.y - qh };
+	const position p1 = { pos.x + qw, pos.y + qh };
+
+	const ndc_position n0 = to_ndc(p0);
+	const ndc_position n1 = to_ndc(p1);
+
+	const array_t<float, 8> data = { radius * 2.f, radius * 2.f, cut_background ? 1.f : 0.f, shadow_blur, radius, radius, radius, radius };
+
+	const auto make_vertex = [col, data](const float x, const float y, const float u, const float v) -> vertex 
+	{
+		return vertex{ .pos = { x, y }, .col = col, .uv = { u, v }, .custom_data = data };
+	};
+
+	const array_t<vertex, 6> vertices =
+	{
+		make_vertex(n0.x, n0.y, -qw, -qh),
+		make_vertex(n1.x, n0.y,  qw, -qh),
+		make_vertex(n0.x, n1.y, -qw,  qh),
+		make_vertex(n1.x, n0.y,  qw, -qh),
+		make_vertex(n1.x, n1.y,  qw,  qh),
+		make_vertex(n0.x, n1.y, -qw,  qh),
+	};
+
+	draw_vertices(vertices, shader_type::shadow_shader);
 }
 
 void rv::renderer::draw_text(const font& font, const position pos, const string_view_t text, const color col,
@@ -571,7 +610,7 @@ void rv::renderer::add_path_point(const position pos)
 	path_points_.push_back(pos);
 }
 
-void rv::renderer::draw_lined_path(const color col, const float thickness, const bool closed) 
+void rv::renderer::draw_lined_path(const color col, const float thickness, const bool closed, const float fringe_width, const cap_style cap, const join_style join) 
 {
 	const cstd::size_t n = path_points_.size();
 
@@ -582,11 +621,10 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 		return;
 	}
 
-	constexpr float fringe_width = 1.f;
 	const float half = thickness * 0.5f;
 	const color transparent{ col.r, col.g, col.b, 0.f };
 
-	const auto make_join = [](const position previous, const position current, const position next) -> position 
+	const auto make_join = [join](const position previous, const position current, const position next) -> position 
 	{
 		const auto dir_in = (current - previous).normalise();
 		const auto dir_out = (next - current).normalise();
@@ -598,7 +636,7 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 		const auto normal = tangent.perpendicular();
 
 		const float c = tangent.dot(out_eff);
-		const float scale = 1.f / cstd::fmaxf(c, 0.25f);
+		const float scale = (join == join_style::bevel) ? 1.0f : (1.f / cstd::fmaxf(c, 0.25f));
 
 		const auto [x, y] = normal * scale;
 
@@ -659,12 +697,152 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 		indices.push_back(idx + 2); indices.push_back(nxt + 3); indices.push_back(idx + 3);
 	}
 
+	if (!closed)
+	{
+		if (cap == cap_style::round)
+		{
+			const cstd::uint32_t cap_segments = 8;
+			
+			auto build_cap = [&](const position p, const auto dir, const cstd::uint32_t v_outer_start, const cstd::uint32_t v_core_start, const cstd::uint32_t v_outer_end, const cstd::uint32_t v_core_end)
+			{
+				const float phi = std::atan2f(dir.y, dir.x);
+				const float theta_start = phi + cstd::numbers::pi_f / 2.f;
+				
+				const cstd::uint32_t center_idx = static_cast<cstd::uint32_t>(vertices.size());
+				vertices.push_back(vertex{ .pos = to_ndc(p), .col = col });
+				
+				cstd::uint32_t prev_outer_idx = v_outer_start;
+				cstd::uint32_t prev_core_idx = v_core_start;
+				
+				for (cstd::uint32_t j = 1; j <= cap_segments; j++)
+				{
+					cstd::uint32_t cur_outer_idx, cur_core_idx;
+					
+					if (j == cap_segments)
+					{
+						cur_outer_idx = v_outer_end;
+						cur_core_idx = v_core_end;
+					}
+					else
+					{
+						const float a = theta_start + (static_cast<float>(j) / static_cast<float>(cap_segments)) * cstd::numbers::pi_f;
+						const float cx = cstd::cosf(a);
+						const float cy = cstd::sinf(a);
+						
+						cur_outer_idx = static_cast<cstd::uint32_t>(vertices.size());
+						vertices.push_back(vertex{ .pos = to_ndc({ p.x + cx * (half + fringe_width), p.y + cy * (half + fringe_width) }), .col = transparent });
+						
+						cur_core_idx = static_cast<cstd::uint32_t>(vertices.size());
+						vertices.push_back(vertex{ .pos = to_ndc({ p.x + cx * half, p.y + cy * half }), .col = col });
+					}
+					
+					indices.push_back(prev_core_idx); indices.push_back(cur_core_idx); indices.push_back(center_idx);
+					indices.push_back(center_idx); indices.push_back(cur_core_idx); indices.push_back(prev_core_idx);
+					
+					indices.push_back(prev_outer_idx); indices.push_back(cur_outer_idx); indices.push_back(cur_core_idx);
+					indices.push_back(cur_core_idx); indices.push_back(cur_outer_idx); indices.push_back(prev_outer_idx);
+					
+					indices.push_back(prev_outer_idx); indices.push_back(cur_core_idx); indices.push_back(prev_core_idx);
+					indices.push_back(prev_core_idx); indices.push_back(cur_core_idx); indices.push_back(prev_outer_idx);
+					
+					prev_outer_idx = cur_outer_idx;
+					prev_core_idx = cur_core_idx;
+				}
+			};
+
+			// start cap
+			const position p0 = path_points_[0];
+			const position p1 = path_points_[1];
+			build_cap(p0, (p1 - p0).normalise(), 3, 2, 0, 1);
+
+			// end cap
+			const position pe = path_points_[n - 1];
+			const position p_prev = path_points_[n - 2];
+			const cstd::uint32_t base = static_cast<cstd::uint32_t>((n - 1) * 4);
+			build_cap(pe, (p_prev - pe).normalise(), base + 0, base + 1, base + 3, base + 2);
+		}
+		else
+		{
+			// flat caps
+			const position p0 = path_points_[0];
+			const position p1 = path_points_[1];
+			
+			auto dir_start = (p1 - p0).normalise();
+			auto norm_start = dir_start.perpendicular();
+
+			const auto core_s = norm_start * half;
+			const auto outer_s = norm_start * (half + fringe_width);
+
+			const position cap_p0 = { p0.x - dir_start.x * fringe_width, p0.y - dir_start.y * fringe_width };
+
+			const cstd::uint32_t v_start = static_cast<cstd::uint32_t>(vertices.size());
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_p0.x + outer_s.x, cap_p0.y + outer_s.y }), .col = transparent });
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_p0.x + core_s.x,  cap_p0.y + core_s.y }),  .col = transparent });
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_p0.x - core_s.x,  cap_p0.y - core_s.y }),  .col = transparent });
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_p0.x - outer_s.x, cap_p0.y - outer_s.y }), .col = transparent });
+
+			const cstd::uint32_t idx = v_start;
+			const cstd::uint32_t nxt = 0;
+
+			// push both windings to ensure it renders regardless of the culling mode
+			indices.push_back(idx); indices.push_back(nxt); indices.push_back(nxt + 1);
+			indices.push_back(idx); indices.push_back(nxt + 1); indices.push_back(nxt);
+			indices.push_back(idx); indices.push_back(nxt + 1); indices.push_back(idx + 1);
+			indices.push_back(idx); indices.push_back(idx + 1); indices.push_back(nxt + 1);
+
+			indices.push_back(idx + 1); indices.push_back(nxt + 1); indices.push_back(nxt + 2);
+			indices.push_back(idx + 1); indices.push_back(nxt + 2); indices.push_back(nxt + 1);
+			indices.push_back(idx + 1); indices.push_back(nxt + 2); indices.push_back(idx + 2);
+			indices.push_back(idx + 1); indices.push_back(idx + 2); indices.push_back(nxt + 2);
+
+			indices.push_back(idx + 2); indices.push_back(nxt + 2); indices.push_back(nxt + 3);
+			indices.push_back(idx + 2); indices.push_back(nxt + 3); indices.push_back(nxt + 2);
+			indices.push_back(idx + 2); indices.push_back(nxt + 3); indices.push_back(idx + 3);
+			indices.push_back(idx + 2); indices.push_back(idx + 3); indices.push_back(nxt + 3);
+
+			// end cap
+			const position pe = path_points_[n - 1];
+			const position p_prev = path_points_[n - 2];
+			auto dir_end = (pe - p_prev).normalise();
+			auto norm_end = dir_end.perpendicular();
+
+			const auto core_e = norm_end * half;
+			const auto outer_e = norm_end * (half + fringe_width);
+
+			const position cap_pe = { pe.x + dir_end.x * fringe_width, pe.y + dir_end.y * fringe_width };
+
+			const cstd::uint32_t v_end = static_cast<cstd::uint32_t>(vertices.size());
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_pe.x + outer_e.x, cap_pe.y + outer_e.y }), .col = transparent });
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_pe.x + core_e.x,  cap_pe.y + core_e.y }),  .col = transparent });
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_pe.x - core_e.x,  cap_pe.y - core_e.y }),  .col = transparent });
+			vertices.push_back(vertex{ .pos = to_ndc({ cap_pe.x - outer_e.x, cap_pe.y - outer_e.y }), .col = transparent });
+
+			const cstd::uint32_t idx_end = static_cast<cstd::uint32_t>((n - 1) * 4);
+			const cstd::uint32_t nxt_end = v_end;
+
+			indices.push_back(idx_end); indices.push_back(nxt_end); indices.push_back(nxt_end + 1);
+			indices.push_back(idx_end); indices.push_back(nxt_end + 1); indices.push_back(nxt_end);
+			indices.push_back(idx_end); indices.push_back(nxt_end + 1); indices.push_back(idx_end + 1);
+			indices.push_back(idx_end); indices.push_back(idx_end + 1); indices.push_back(nxt_end + 1);
+
+			indices.push_back(idx_end + 1); indices.push_back(nxt_end + 1); indices.push_back(nxt_end + 2);
+			indices.push_back(idx_end + 1); indices.push_back(nxt_end + 2); indices.push_back(nxt_end + 1);
+			indices.push_back(idx_end + 1); indices.push_back(nxt_end + 2); indices.push_back(idx_end + 2);
+			indices.push_back(idx_end + 1); indices.push_back(idx_end + 2); indices.push_back(nxt_end + 2);
+
+			indices.push_back(idx_end + 2); indices.push_back(nxt_end + 2); indices.push_back(nxt_end + 3);
+			indices.push_back(idx_end + 2); indices.push_back(nxt_end + 3); indices.push_back(nxt_end + 2);
+			indices.push_back(idx_end + 2); indices.push_back(nxt_end + 3); indices.push_back(idx_end + 3);
+			indices.push_back(idx_end + 2); indices.push_back(idx_end + 3); indices.push_back(nxt_end + 3);
+		}
+	}
+
 	draw_indexed_vertices(vertices, indices);
 
 	path_points_.clear();
 }
 
-void rv::renderer::draw_filled_path(const color col) 
+void rv::renderer::draw_filled_path(const color col, const float fringe_width) 
 {
 	if (path_points_.size() <= 2) 
 	{
@@ -688,8 +866,125 @@ void rv::renderer::draw_filled_path(const color col)
 		draw_indexed_vertices(vertices, indices);
 	}
 
-	draw_lined_path(col, 0.f);
+	draw_lined_path(col, 0.f, true, fringe_width);
 
+	path_points_.clear();
+}
+
+void rv::renderer::draw_shadow_lined_path(const color col, const float thickness, const float shadow_blur, const bool closed) 
+{
+	draw_lined_path(col, thickness, closed, shadow_blur, cap_style::round, join_style::bevel);
+}
+
+void rv::renderer::draw_shadow_filled_path(const color col, const float shadow_blur) 
+{
+	const cstd::size_t n = path_points_.size();
+	if (n <= 2) 
+	{
+		path_points_.clear();
+		return;
+	}
+
+	const vector_t<cstd::uint32_t> core_indices = triangulate::execute(path_points_);
+	if (!core_indices.empty())
+	{
+		vector_t<vertex> core_vertices;
+		core_vertices.reserve(n);
+		for (const position& p : path_points_)
+		{
+			core_vertices.push_back(vertex{ .pos = to_ndc(p), .col = col });
+		}
+		draw_indexed_vertices(core_vertices, core_indices);
+	}
+
+	if (shadow_blur > 0.f)
+	{
+		float area = 0.f;
+		for (cstd::size_t i = 0; i < n; i++) 
+		{
+			const auto p0 = path_points_[i];
+			const auto p1 = path_points_[(i + 1) % n];
+			area += (p1.x - p0.x) * (p1.y + p0.y);
+		}
+			const bool is_cw = area < 0.f;
+
+		vector_t<vertex> vertices;
+		vector_t<cstd::uint32_t> indices;
+		const color transparent{ col.r, col.g, col.b, 0.f };
+
+		for (cstd::size_t i = 0; i < n; i++)
+		{
+			const position p0 = path_points_[i];
+			const position p1 = path_points_[(i + 1) % n];
+			
+			auto dir = (p1 - p0).normalise();
+			auto norm = dir.perpendicular();
+			if (!is_cw) { norm.x = -norm.x; norm.y = -norm.y; }
+
+			const cstd::uint32_t base = static_cast<cstd::uint32_t>(vertices.size());
+			vertices.push_back(vertex{ .pos = to_ndc(p0), .col = col });
+			vertices.push_back(vertex{ .pos = to_ndc({ p0.x + norm.x * shadow_blur, p0.y + norm.y * shadow_blur }), .col = transparent });
+			vertices.push_back(vertex{ .pos = to_ndc(p1), .col = col });
+			vertices.push_back(vertex{ .pos = to_ndc({ p1.x + norm.x * shadow_blur, p1.y + norm.y * shadow_blur }), .col = transparent });
+
+			if (is_cw)
+			{
+				indices.push_back(base + 0); indices.push_back(base + 1); indices.push_back(base + 2);
+				indices.push_back(base + 1); indices.push_back(base + 3); indices.push_back(base + 2);
+			}
+			else
+			{
+				indices.push_back(base + 0); indices.push_back(base + 2); indices.push_back(base + 1);
+				indices.push_back(base + 1); indices.push_back(base + 2); indices.push_back(base + 3);
+			}
+
+			const position p_prev = path_points_[(i + n - 1) % n];
+			auto dir_prev = (p0 - p_prev).normalise();
+			auto norm_prev = dir_prev.perpendicular();
+			if (!is_cw) { norm_prev.x = -norm_prev.x; norm_prev.y = -norm_prev.y; }
+
+			const float cross = dir_prev.x * dir.y - dir_prev.y * dir.x;
+			const bool is_convex = is_cw ? (cross > 0.f) : (cross < 0.f);
+
+			if (is_convex)
+			{
+				float a0 = cstd::atan2f(norm_prev.y, norm_prev.x);
+				float a1 = cstd::atan2f(norm.y, norm.x);
+				
+				if (is_cw && a1 < a0) a1 += cstd::numbers::pi_f * 2.f;
+				if (!is_cw && a1 > a0) a1 -= cstd::numbers::pi_f * 2.f;
+
+				const cstd::uint32_t cap_segments = 5;
+				const cstd::uint32_t center_idx = static_cast<cstd::uint32_t>(vertices.size());
+				vertices.push_back(vertex{ .pos = to_ndc(p0), .col = col });
+
+				cstd::uint32_t prev_arc_idx = static_cast<cstd::uint32_t>(vertices.size());
+				vertices.push_back(vertex{ .pos = to_ndc({ p0.x + norm_prev.x * shadow_blur, p0.y + norm_prev.y * shadow_blur }), .col = transparent });
+
+				for (cstd::uint32_t j = 1; j <= cap_segments; j++)
+				{
+					const float a = a0 + (a1 - a0) * (static_cast<float>(j) / static_cast<float>(cap_segments));
+					const float cx = cstd::cosf(a);
+					const float cy = cstd::sinf(a);
+
+					const cstd::uint32_t cur_arc_idx = static_cast<cstd::uint32_t>(vertices.size());
+					vertices.push_back(vertex{ .pos = to_ndc({ p0.x + cx * shadow_blur, p0.y + cy * shadow_blur }), .col = transparent });
+
+					if (is_cw)
+					{
+						indices.push_back(center_idx); indices.push_back(prev_arc_idx); indices.push_back(cur_arc_idx);
+					}
+					else
+					{
+						indices.push_back(center_idx); indices.push_back(cur_arc_idx); indices.push_back(prev_arc_idx);
+					}
+
+					prev_arc_idx = cur_arc_idx;
+				}
+			}
+		}
+		draw_indexed_vertices(vertices, indices);
+	}
 	path_points_.clear();
 }
 

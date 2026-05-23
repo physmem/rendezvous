@@ -53,17 +53,17 @@ namespace rv
 
 		[[nodiscard]] bool is_mouse_down(const button_type button) const noexcept
 		{
-			return button_in_range(button) && state_.keys_down[button];
+			return button_in_range(button) && state_.mouse_down[button];
 		}
 
 		[[nodiscard]] bool is_mouse_clicked(const button_type button) const noexcept
 		{
-			return button_in_range(button) && state_.keys_pressed[button];
+			return button_in_range(button) && state_.mouse_clicked[button];
 		}
 
 		[[nodiscard]] bool is_mouse_released(const button_type button) const noexcept
 		{
-			return button_in_range(button) && state_.keys_released[button];
+			return button_in_range(button) && state_.mouse_released[button];
 		}
 
 		[[nodiscard]] position mouse_pos() const noexcept

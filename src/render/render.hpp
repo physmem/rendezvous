@@ -19,6 +19,18 @@ namespace rv
 		rounding_flags_all = rounding_flags_top_left | rounding_flags_top_right | rounding_flags_bottom_right | rounding_flags_bottom_left
 	};
 
+	enum class cap_style : cstd::uint8_t
+	{
+		flat,
+		round
+	};
+
+	enum class join_style : cstd::uint8_t
+	{
+		miter,
+		bevel
+	};
+
 	struct vertex 
 	{
 		ndc_position pos;
@@ -68,11 +80,14 @@ namespace rv
 		void draw_shadow_rect(position min, position max, color col, float rounding = 0.f, float shadow_blur = 15.f, float shadow_spread = 0.f, rounding_flags flags = rounding_flags_all, bool cut_background = false) noexcept;
 
 		void draw_line(position a, position b, color col, float thickness = 1.f) noexcept;
+		void draw_shadow_line(position a, position b, color col, float thickness = 1.f, float shadow_blur = 15.f) noexcept;
 
 		void draw_circle(position pos, float radius, color col, float thickness = 1.f,
 						 cstd::size_t segment_count = 32) noexcept;
 
 		void draw_circle_filled(position pos, float radius, color col, cstd::size_t segment_count = 32) noexcept;
+
+		void draw_shadow_circle(position pos, float radius, color col, float shadow_blur, bool cut_background = false) noexcept;
 
 		void draw_text(const font& font, position pos, string_view_t text, color col, float size = 0.f) noexcept;
 		[[nodiscard]] position calc_text_size(const font& font, string_view_t text, float size = 0.f) const noexcept;
@@ -81,8 +96,11 @@ namespace rv
 		optional_t<font> add_font(const string_t& path, float pixel_height = 16.f, cstd::uint32_t min_char = 32, cstd::uint32_t max_char = 126, bool anti_aliased = true);
 
 		void add_path_point(position pos);
-		void draw_lined_path(color col, float thickness = 1.f, bool closed = true);
-		void draw_filled_path(color col);
+		void draw_lined_path(color col, float thickness = 1.f, bool closed = true, float fringe_width = 1.f, cap_style cap = cap_style::flat, join_style join = join_style::miter);
+		void draw_filled_path(color col, float fringe_width = 1.f);
+		
+		void draw_shadow_lined_path(color col, float thickness = 1.f, float shadow_blur = 15.f, bool closed = true);
+		void draw_shadow_filled_path(color col, float shadow_blur = 15.f);
 
 		void add_arc_path(position pos, float radius, float a_min, float a_max, cstd::size_t segment_count = 8) noexcept;
 

@@ -177,6 +177,24 @@ cstd::int32_t main()
 		renderer->draw_rect_filled({ 20.f, 200.f }, { 40.f, 600.f }, { 0.2f, 0.2f, 0.2f, 0.8f }, 10.f);
 		renderer->draw_rect_filled({ 20.f, thumb_y }, { 40.f, thumb_y + 40.f }, { 0.8f, 0.8f, 0.8f, 1.f }, 10.f);
 
+		// test shadow circle (with hollow cutout)
+		renderer->draw_shadow_circle({ 900.f, 450.f }, 40.f, { 1.f, 0.f, 0.f, 1.f }, 20.f, true);
+
+		// test shadow line (drawn under a solid line)
+		renderer->draw_shadow_line({ 980.f, 410.f }, { 1080.f, 490.f }, { 0.f, 1.f, 0.f, 1.f }, 5.f, 15.f);
+		renderer->draw_line({ 980.f, 410.f }, { 1080.f, 490.f }, { 1.f, 1.f, 1.f, 1.f }, 5.f);
+
+		// test shadow poly (drawn under a solid poly)
+		renderer->add_path_point({ 1120.f, 490.f });
+		renderer->add_path_point({ 1170.f, 410.f });
+		renderer->add_path_point({ 1220.f, 490.f });
+		renderer->draw_shadow_filled_path({ 0.f, 0.f, 1.f, 1.f }, 25.f);
+		
+		renderer->add_path_point({ 1120.f, 490.f });
+		renderer->add_path_point({ 1170.f, 410.f });
+		renderer->add_path_point({ 1220.f, 490.f });
+		renderer->draw_filled_path({ 1.f, 1.f, 1.f, 1.f });
+
 		const float fill_progress = std::fmod(renderer->state().time, 2.0f) / 2.0f;
 		const float a_min = -cstd::numbers::pi_f / 2.0f;
 		const float a_max = a_min + (fill_progress * cstd::numbers::pi_f * 2.0f);

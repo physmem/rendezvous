@@ -39,6 +39,9 @@ float4 pixel_shader(ps_input input) : SV_TARGET
 
 float sd_round_rect(float2 p, float2 b, float4 r)
 {
+    float max_rad = min(b.x, b.y);
+    r = min(r, max_rad);
+
     float2 s = step(0.0, p);
     
     float rad_top = lerp(r.w, r.x, s.x);

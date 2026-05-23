@@ -104,7 +104,6 @@ namespace rv
 		explicit dx11_renderer(ID3D11Device* device, ID3D11DeviceContext* context) noexcept;
 		explicit dx11_renderer(IDXGISwapChain* swap_chain) noexcept;
 
-		void begin_frame(vector_2d<float> display_size) noexcept override;
 		void end_frame() noexcept override;
 
 	protected:
@@ -112,8 +111,12 @@ namespace rv
 
 		bool create_buffer(cstd::size_t vertex_count);
 		bool try_widen_buffer();
+		
+		bool create_index_buffer(cstd::size_t index_count);
+		bool try_widen_index_buffer();
 
 		bool init_backend() noexcept override;
+		void begin_frame_backend(vector_2d<float> display_size) noexcept override;
 		void flush_pending_vertices() noexcept override;
 		shared_ptr_t<texture> create_texture(span_t<const cstd::uint8_t> buffer, cstd::uint32_t width, cstd::uint32_t height) override;
 
@@ -128,5 +131,6 @@ namespace rv
 		dx11_object<ID3D11InputLayout> input_layout_;
 		dx11_object<ID3D11BlendState> blend_state_;
 		dx11_object<ID3D11Buffer> buffer_;
+		dx11_object<ID3D11Buffer> index_buffer_;
 	};
 }

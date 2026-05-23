@@ -71,15 +71,23 @@ float4 rect_pixel_shader(ps_input input) : SV_TARGET
 float4 shadow_pixel_shader(ps_input input) : SV_TARGET
 {
     float2 rect_size = input.custom_data.xy;
+    float cutout = input.custom_data.z;
     float shadow_blur = max(input.custom_data.w, 0.001f);
     float4 radii = input.custom_data2;
     
     float2 p = input.uv;
     float d = sd_round_rect(p, rect_size * 0.5f, radii);
-    float dist = max(d, 0.0);
+    
+    float cutout_alpha = 1.0f;
+    if (cutout > 0.5f)
+    {
+        cutout_alpha = saturate(d + 0.5f);
+    }
+    
+    float dist = max(d, 0.0f);
     float x = saturate(dist / shadow_blur);
     
-    float alpha = pow(1.0 - x, 3.0);
+    float alpha = pow(1.0f - x, 3.0f) * cutout_alpha;
     
     return float4(input.color.rgb, input.color.a * alpha);
 }

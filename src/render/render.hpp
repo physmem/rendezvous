@@ -38,6 +38,8 @@ namespace rv
 	{
 		cstd::uint32_t vertex_offset;
 		cstd::uint32_t vertex_count;
+		cstd::uint32_t index_offset;
+		cstd::uint32_t index_count;
 		shared_ptr_t<texture> texture;
 		shader_type shader;
 	};
@@ -45,6 +47,9 @@ namespace rv
 	struct state
 	{
 		vector_2d<float> display_size = { };
+		float time = 0.f;
+		float delta_time = 0.f;
+		time_point_t last_time = { };
 	};
 
 	class renderer 
@@ -52,14 +57,15 @@ namespace rv
 	public:
 		bool init();
 
-		virtual void begin_frame(vector_2d<float> display_size) noexcept = 0;
+		void begin_frame(vector_2d<float> display_size) noexcept;
 		virtual void end_frame() noexcept = 0;
 
 		void draw_vertices(span_t<const vertex> vertices, shader_type shader = shader_type::default_shader) noexcept;
+		void draw_indexed_vertices(span_t<const vertex> vertices, span_t<const cstd::uint32_t> indices, shader_type shader = shader_type::default_shader) noexcept;
 
 		void draw_rect(position min, position max, color col, float thickness = 1.f, float rounding = 0.f) noexcept;
 		void draw_rect_filled(position min, position max, color col, float rounding = 0.f, rounding_flags flags = rounding_flags_all) noexcept;
-		void draw_shadow_rect(position min, position max, color col, float rounding = 0.f, float shadow_blur = 15.f, float shadow_spread = 0.f, rounding_flags flags = rounding_flags_all) noexcept;
+		void draw_shadow_rect(position min, position max, color col, float rounding = 0.f, float shadow_blur = 15.f, float shadow_spread = 0.f, rounding_flags flags = rounding_flags_all, bool cut_background = false) noexcept;
 
 		void draw_line(position a, position b, color col, float thickness = 1.f) noexcept;
 
@@ -74,30 +80,34 @@ namespace rv
 		optional_t<font> add_font(span_t<const cstd::uint8_t> bytes, float pixel_height = 16.f, cstd::uint32_t min_char = 32, cstd::uint32_t max_char = 126, bool anti_aliased = true);
 		optional_t<font> add_font(const string_t& path, float pixel_height = 16.f, cstd::uint32_t min_char = 32, cstd::uint32_t max_char = 126, bool anti_aliased = true);
 
+		void add_path_point(position pos);
+		void draw_lined_path(color col, float thickness = 1.f, bool closed = true);
+		void draw_filled_path(color col);
+
+		void add_arc_path(position pos, float radius, float a_min, float a_max, cstd::size_t segment_count = 8) noexcept;
+
 		[[nodiscard]] state& state() noexcept;
 		[[nodiscard]] const struct state& state() const noexcept;
 
 	protected:
 		virtual bool init_backend() noexcept = 0;
+		virtual void begin_frame_backend(vector_2d<float> display_size) noexcept = 0;
 		virtual void flush_pending_vertices() noexcept = 0;
 		virtual shared_ptr_t<texture> create_texture(span_t<const cstd::uint8_t> buffer, cstd::uint32_t width, cstd::uint32_t height) = 0;
 
-		void add_arc_path(position pos, float radius, float a_min, float a_max, cstd::size_t segment_count = 8) noexcept;
 		void add_circle_path(position pos, float radius, cstd::size_t segment_count) noexcept;
-
-		void add_path_point(position pos);
-		void draw_lined_path(color col, float thickness = 1.f, bool closed = true);
-		void draw_filled_path(color col);
 
 		[[nodiscard]] ndc_position to_ndc(position pos) const noexcept;
 
 		struct state state_;
 		vector_t<position> path_points_ = { };
 		vector_t<vertex> pending_vertices_ = { };
+		vector_t<cstd::uint32_t> pending_indices_ = { };
 		vector_t<vertex_batch> pending_batches_ = { };
 		shared_ptr_t<texture> current_texture_ = { };
 		shared_ptr_t<texture> default_texture_ = { };
 
 		cstd::size_t buffer_vertex_count_ = 0;
+		cstd::size_t buffer_index_count_ = 0;
 	};
 }

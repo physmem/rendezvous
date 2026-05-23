@@ -9,6 +9,7 @@
 #include <array>
 #include <optional>
 #include <span>
+#include <chrono>
 
 namespace cstd
 {
@@ -47,6 +48,7 @@ template <class T>
 using istreambuf_iterator_t = std::istreambuf_iterator<T>;
 
 using ifstream_t = std::ifstream;
+using time_point_t = std::chrono::time_point<std::chrono::high_resolution_clock>;
 
 using string_t = std::string;
 using wstring_t = std::wstring;
@@ -112,5 +114,15 @@ namespace cstd
 	namespace numbers
 	{
 		inline constexpr float pi_f = std::numbers::pi_v<float>;
+	}
+
+	inline time_point_t get_time()
+	{
+		return std::chrono::high_resolution_clock::now();
+	}
+
+	inline float get_time_diff(const time_point_t end, const time_point_t start)
+	{
+		return std::chrono::duration<float>(end - start).count();
 	}
 }

@@ -1,5 +1,6 @@
 #include "log/log.hpp"
 #include "render/impl/dx11.hpp"
+#include "backend/win32.hpp"
 #include "util/types.hpp"
 
 rv::vector_2d<float> screen_size = { 1280.f, 720.f };
@@ -11,6 +12,8 @@ static LRESULT CALLBACK wnd_proc(const HWND hwnd, const UINT msg, const WPARAM w
 		screen_size.x = static_cast<float>(LOWORD(lparam));
 		screen_size.y = static_cast<float>(HIWORD(lparam));
 	}
+
+	rv::backend::win32::handle_message(hwnd, msg, wparam, lparam);
 
     return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
@@ -139,7 +142,7 @@ cstd::int32_t main()
 		renderer->draw_rect({ 400.f, 100.f }, { 600.f, 250.f }, { 0.f, 1.f, 0.f, 1.f }, 2.f, 8.f);
 
 		// standalone blue shadow rect
-		renderer->draw_shadow_rect({ 700.f, 100.f }, { 900.f, 250.f }, { 0.f, 0.5f, 1.f, 0.8f }, 17.5f, 35.f, 3.f);
+		renderer->draw_shadow_rect({ 700.f, 100.f }, { 900.f, 250.f }, { 0.f, 0.5f, 1.f, 0.8f }, 17.5f, 35.f, 3.f, rv::rounding_flags_all, true);
 
 		// red filled rectangle with a really thick shadow
 		renderer->draw_shadow_rect({ 100.f, 350.f }, { 300.f, 500.f }, { 0.f, 0.f, 0.f, 0.6f }, 17.5f, 10.f, 20.f);
@@ -150,13 +153,46 @@ cstd::int32_t main()
 		renderer->draw_shadow_rect({ 400.f, 350.f }, { 600.f, 500.f }, { 0.f, 0.f, 0.f, 0.6f }, 30.f, 25.f, 0.f, selective_flags);
 		renderer->draw_rect_filled({ 400.f, 350.f }, { 600.f, 500.f }, { 0.f, 1.f, 0.f, 1.f }, 30.f, selective_flags);
 
-		renderer->draw_circle_filled({ 750.f, 400.f }, 50.f, { 1.f, 0.f, 0.f, 1.f });
+		const auto mouse_pos = rv::backend::win32::get_mouse_pos();
+		if (rv::backend::win32::is_mouse_down(0))
+		{
+			renderer->draw_circle_filled({ mouse_pos.x, mouse_pos.y }, 25.f, { 1.f, 1.f, 1.f, 0.5f });
+		}
+		else
+		{
+			renderer->draw_circle({ mouse_pos.x, mouse_pos.y }, 25.f, { 1.f, 1.f, 1.f, 0.5f }, 2.f);
+		}
+
+		// win32 scroll example
+		static float cumulative_scroll = 0.f;
+		cumulative_scroll += rv::backend::win32::get_scroll_delta();
+	
+		if (cumulative_scroll > 10.f) cumulative_scroll = 10.f;
+		if (cumulative_scroll < -10.f) cumulative_scroll = -10.f;
+		float thumb_y = 380.f - (cumulative_scroll * 18.f);
+
+		renderer->draw_rect_filled({ 20.f, 200.f }, { 40.f, 600.f }, { 0.2f, 0.2f, 0.2f, 0.8f }, 10.f);
+		renderer->draw_rect_filled({ 20.f, thumb_y }, { 40.f, thumb_y + 40.f }, { 0.8f, 0.8f, 0.8f, 1.f }, 10.f);
+
+		const float fill_progress = std::fmod(renderer->state().time, 2.0f) / 2.0f;
+		const float a_min = -cstd::numbers::pi_f / 2.0f;
+		const float a_max = a_min + (fill_progress * cstd::numbers::pi_f * 2.0f);
+		
+		renderer->draw_circle({ 750.f, 450.f }, 50.f, { 1.f, 1.f, 1.f, 1.f }, 1.f);
+		
+		if (fill_progress > 0.01f)
+		{
+			// center point
+			renderer->add_path_point({ 750.f, 450.f });
+			renderer->add_arc_path({ 750.f, 450.f }, 50.f, a_min, a_max, 32);
+			renderer->draw_filled_path({ 1.f, 1.f, 1.f, 0.6f });
+		}
 
 		if (font)
 		{
 			const auto state = renderer->state();
 
-			const string_t text = std::format("width {}px height {}px", state.display_size.x, state.display_size.y);
+			const string_t text = std::format("width {}px height {}px time {:.2f}s delta {:.4f}s", state.display_size.x, state.display_size.y, state.time, state.delta_time);
 
 			constexpr float size = 35.f;
 			constexpr rv::position text_pos = { 100.f, 580.f};
@@ -170,6 +206,7 @@ cstd::int32_t main()
 
 		swap_chain->Present(1, 0);
 
+		rv::backend::win32::update();
 	} while (msg.message != WM_QUIT);
 
 	return 0;

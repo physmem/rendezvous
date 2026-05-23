@@ -97,7 +97,38 @@ bool rv::dx11_renderer::try_widen_buffer()
 	return create_buffer(pending_vertices_.size() + additional_vertices);
 }
 
-void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcept
+bool rv::dx11_renderer::create_index_buffer(const cstd::size_t index_count)
+{
+	D3D11_BUFFER_DESC buffer_desc = { };
+
+	buffer_desc.ByteWidth = sizeof(cstd::uint32_t) * static_cast<cstd::uint32_t>(index_count);
+	buffer_desc.Usage = D3D11_USAGE_DYNAMIC;
+	buffer_desc.BindFlags = D3D11_BIND_INDEX_BUFFER;
+	buffer_desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+
+	if (FAILED(device_->CreateBuffer(&buffer_desc, nullptr, index_buffer_.release_and_get())))
+	{
+		return false;
+	}
+
+	buffer_index_count_ = index_count;
+
+	return true;
+}
+
+bool rv::dx11_renderer::try_widen_index_buffer()
+{
+	if (pending_indices_.size() <= buffer_index_count_)
+	{
+		return true;
+	}
+
+	constexpr cstd::size_t additional_indices = 512;
+
+	return create_index_buffer(pending_indices_.size() + additional_indices);
+}
+
+void rv::dx11_renderer::begin_frame_backend(const vector_2d<float> display_size) noexcept
 {
 	D3D11_VIEWPORT viewport = { };
 
@@ -119,8 +150,6 @@ void rv::dx11_renderer::begin_frame(const vector_2d<float> display_size) noexcep
 
 	context_->OMSetBlendState(blend_state_.value(), blend_factor.data(), 0xffffffff);
 	context_->PSSetSamplers(0, 1, &sampler);
-
-	state_.display_size = display_size;
 }
 
 void rv::dx11_renderer::end_frame() noexcept
@@ -145,7 +174,7 @@ bool rv::dx11_renderer::create_sampler() noexcept
 
 void rv::dx11_renderer::flush_pending_vertices() noexcept 
 {
-	if (pending_vertices_.empty()) 
+	if (pending_vertices_.empty() || pending_indices_.empty()) 
 	{
 		return;
 	}
@@ -155,20 +184,33 @@ void rv::dx11_renderer::flush_pending_vertices() noexcept
 	if (!try_widen_buffer() || FAILED(context_->Map(buffer_.value(), 0, D3D11_MAP_WRITE_DISCARD, 0, &resource))) 
 	{
 		pending_vertices_.clear();
-
+		pending_indices_.clear();
 		return;
 	}
 
 	cstd::memcpy(resource.pData, pending_vertices_.data(), pending_vertices_.size() * sizeof(vertex));
-
 	context_->Unmap(buffer_.value(), 0);
+
+	D3D11_MAPPED_SUBRESOURCE idx_resource = { };
+
+	if (!try_widen_index_buffer() || FAILED(context_->Map(index_buffer_.value(), 0, D3D11_MAP_WRITE_DISCARD, 0, &idx_resource))) 
+	{
+		pending_vertices_.clear();
+		pending_indices_.clear();
+		return;
+	}
+
+	cstd::memcpy(idx_resource.pData, pending_indices_.data(), pending_indices_.size() * sizeof(cstd::uint32_t));
+	context_->Unmap(index_buffer_.value(), 0);
 
 	constexpr cstd::uint32_t strides = sizeof(vertex);
 	constexpr cstd::uint32_t offsets = 0;
 
 	ID3D11Buffer* buffer = buffer_.value();
-
 	context_->IASetVertexBuffers(0, 1, &buffer, &strides, &offsets);
+
+	ID3D11Buffer* idx_buffer = index_buffer_.value();
+	context_->IASetIndexBuffer(idx_buffer, DXGI_FORMAT_R32_UINT, 0);
 
 	for (const auto& batch : pending_batches_) 
 	{
@@ -189,10 +231,11 @@ void rv::dx11_renderer::flush_pending_vertices() noexcept
 		}
 
 		context_->PSSetShaderResources(0, 1, &shader);
-		context_->Draw(batch.vertex_count, batch.vertex_offset);
+		context_->DrawIndexed(batch.index_count, batch.index_offset, batch.vertex_offset);
 	}
 
 	pending_vertices_.clear();
+	pending_indices_.clear();
 	pending_batches_.clear();
 }
 

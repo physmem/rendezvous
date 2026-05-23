@@ -144,6 +144,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\backend\win32.cpp" />
     <ClCompile Include="src\main.cpp" />
     <ClCompile Include="src\render\impl\dx11.cpp" />
     <ClCompile Include="src\render\render.cpp" />
@@ -152,6 +153,7 @@
     <None Include="vcpkg.json" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\backend\win32.hpp" />
     <ClInclude Include="src\log\log.hpp" />
     <ClInclude Include="src\render\impl\dx11.hpp" />
     <ClInclude Include="src\render\position.hpp" />

@@ -10,6 +10,7 @@
 #endif
 
 #include "../util/file.hpp"
+#include "../util/triangulate.hpp"
 
 namespace
 {
@@ -60,7 +61,22 @@ bool rv::renderer::init()
 	default_texture_ = create_texture(white, 1, 1);
 	current_texture_ = default_texture_;
 
+	state_.last_time = cstd::get_time();
+
 	return static_cast<bool>(default_texture_);
+}
+
+void rv::renderer::begin_frame(const vector_2d<float> display_size) noexcept
+{
+	const time_point_t current_time = cstd::get_time();
+
+	state_.delta_time = cstd::get_time_diff(current_time, state_.last_time);
+	state_.time += state_.delta_time;
+
+	state_.last_time = current_time;
+	state_.display_size = display_size;
+
+	begin_frame_backend(display_size);
 }
 
 void rv::renderer::draw_vertices(const span_t<const vertex> vertices, const shader_type shader) noexcept 
@@ -73,14 +89,49 @@ void rv::renderer::draw_vertices(const span_t<const vertex> vertices, const shad
 	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture || 
 		pending_batches_.back().shader != shader) {
 		pending_batches_.push_back(vertex_batch{ static_cast<cstd::uint32_t>(pending_vertices_.size()), 0, 
-			current_texture_, shader });
+			static_cast<cstd::uint32_t>(pending_indices_.size()), 0, current_texture_, shader });
 	}
 
 	auto& current_batch = pending_batches_.back();
+	const cstd::uint32_t index_shift = current_batch.vertex_count;
+	const cstd::uint32_t count = static_cast<cstd::uint32_t>(vertices.size());
 
-	current_batch.vertex_count += static_cast<cstd::uint32_t>(vertices.size());
+	current_batch.vertex_count += count;
+	current_batch.index_count += count;
 
 	pending_vertices_.insert(pending_vertices_.end(), vertices.begin(), vertices.end());
+	
+	for (cstd::uint32_t i = 0; i < count; ++i) {
+		pending_indices_.push_back(i + index_shift);
+	}
+}
+
+void rv::renderer::draw_indexed_vertices(const span_t<const vertex> vertices, const span_t<const cstd::uint32_t> indices, const shader_type shader) noexcept 
+{
+	if (vertices.empty() || indices.empty()) 
+	{
+		return;
+	}
+
+	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture || 
+		pending_batches_.back().shader != shader) 
+	{
+		pending_batches_.push_back(vertex_batch{ static_cast<cstd::uint32_t>(pending_vertices_.size()), 0, 
+			static_cast<cstd::uint32_t>(pending_indices_.size()), 0, current_texture_, shader });
+	}
+
+	auto& current_batch = pending_batches_.back();
+	const cstd::uint32_t index_shift = current_batch.vertex_count;
+
+	current_batch.vertex_count += static_cast<cstd::uint32_t>(vertices.size());
+	current_batch.index_count += static_cast<cstd::uint32_t>(indices.size());
+
+	pending_vertices_.insert(pending_vertices_.end(), vertices.begin(), vertices.end());
+	
+	for (const cstd::uint32_t index : indices) 
+	{
+		pending_indices_.push_back(index + index_shift);
+	}
 }
 
 void rv::renderer::draw_rect(const position min, const position max, const color col, const float thickness, const float rounding) noexcept 
@@ -149,7 +200,7 @@ void rv::renderer::draw_rect_filled(const position min, const position max, cons
 	draw_vertices(vertices, shader_type::rect_shader);
 }
 
-void rv::renderer::draw_shadow_rect(const position min, const position max, const color col, const float rounding, const float shadow_blur, const float shadow_spread, const rounding_flags flags) noexcept 
+void rv::renderer::draw_shadow_rect(const position min, const position max, const color col, const float rounding, const float shadow_blur, const float shadow_spread, const rounding_flags flags, const bool cut_background) noexcept 
 {
 	const float width = max.x - min.x;
 	const float height = max.y - min.y;
@@ -175,7 +226,7 @@ void rv::renderer::draw_shadow_rect(const position min, const position max, cons
 	const float rbr = (flags & rounding_flags_bottom_right) ? effective_rounding : 0.f;
 	const float rbl = (flags & rounding_flags_bottom_left) ? effective_rounding : 0.f;
 
-	const array_t<float, 8> data = { effective_width, effective_height, 0.f, shadow_blur, rtr, rbr, rbl, rtl };
+	const array_t<float, 8> data = { effective_width, effective_height, cut_background ? 1.f : 0.f, shadow_blur, rtr, rbr, rbl, rtl };
 
 	const auto make_vertex = [col, data](const float x, const float y, const float u, const float v) -> vertex 
 	{
@@ -532,7 +583,6 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 	}
 
 	constexpr float fringe_width = 1.f;
-
 	const float half = thickness * 0.5f;
 	const color transparent{ col.r, col.g, col.b, 0.f };
 
@@ -548,55 +598,11 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 		const auto normal = tangent.perpendicular();
 
 		const float c = tangent.dot(out_eff);
-		const float scale = 1.f / cstd::fmaxf(c, 0.1f);
+		const float scale = 1.f / cstd::fmaxf(c, 0.25f);
 
 		const auto [x, y] = normal * scale;
 
 		return { x, y };
-	};
-
-	const auto draw_segment = [&](const position pos_a, const position join_a, const position pos_b, const position join_b) 
-	{
-		const auto core_a = join_a * half;
-		const auto outer_a = join_a * (half + fringe_width);
-		const auto core_b = join_b * half;
-		const auto outer_b = join_b * (half + fringe_width);
-
-		const ndc_position a_outer_fringe = to_ndc({ pos_a.x + outer_a.x, pos_a.y + outer_a.y });
-		const ndc_position a_outer_opaque = to_ndc({ pos_a.x + core_a.x,  pos_a.y + core_a.y });
-		const ndc_position a_inner_opaque = to_ndc({ pos_a.x - core_a.x,  pos_a.y - core_a.y });
-		const ndc_position a_inner_fringe = to_ndc({ pos_a.x - outer_a.x, pos_a.y - outer_a.y });
-
-		const ndc_position b_outer_fringe = to_ndc({ pos_b.x + outer_b.x, pos_b.y + outer_b.y });
-		const ndc_position b_outer_opaque = to_ndc({ pos_b.x + core_b.x,  pos_b.y + core_b.y });
-		const ndc_position b_inner_opaque = to_ndc({ pos_b.x - core_b.x,  pos_b.y - core_b.y });
-		const ndc_position b_inner_fringe = to_ndc({ pos_b.x - outer_b.x, pos_b.y - outer_b.y });
-
-		const array_t<vertex, 18> vertices =
-		{
-			vertex{.pos = a_outer_fringe, .col = transparent },
-			vertex{.pos = b_outer_fringe, .col = transparent },
-			vertex{.pos = a_outer_opaque, .col = col },
-			vertex{.pos = b_outer_fringe, .col = transparent },
-			vertex{.pos = b_outer_opaque, .col = col },
-			vertex{.pos = a_outer_opaque, .col = col },
-
-			vertex{.pos = a_outer_opaque, .col = col },
-			vertex{.pos = b_outer_opaque, .col = col },
-			vertex{.pos = a_inner_opaque, .col = col },
-			vertex{.pos = b_outer_opaque, .col = col },
-			vertex{.pos = b_inner_opaque, .col = col },
-			vertex{.pos = a_inner_opaque, .col = col },
-
-			vertex{.pos = a_inner_opaque, .col = col },
-			vertex{.pos = b_inner_opaque, .col = col },
-			vertex{.pos = a_inner_fringe, .col = transparent },
-			vertex{.pos = b_inner_opaque, .col = col },
-			vertex{.pos = b_inner_fringe, .col = transparent },
-			vertex{.pos = a_inner_fringe, .col = transparent },
-		};
-
-		draw_vertices(vertices);
 	};
 
 	const auto prev_of = [&](const cstd::size_t i) -> position 
@@ -617,55 +623,69 @@ void rv::renderer::draw_lined_path(const color col, const float thickness, const
 		return closed ? path_points_[0] : path_points_[i];
 	};
 
-	const position first_pos = path_points_[0];
-	const position first_join = make_join(prev_of(0), first_pos, next_of(0));
+	vector_t<vertex> vertices;
+	vertices.reserve(n * 4);
 
-	position previous_pos = first_pos;
-	position previous_join = first_join;
-
-	for (cstd::size_t i = 1; i < n; i++) 
+	for (cstd::size_t i = 0; i < n; i++) 
 	{
 		const position current_pos = path_points_[i];
 		const position current_join = make_join(prev_of(i), current_pos, next_of(i));
 
-		draw_segment(previous_pos, previous_join, current_pos, current_join);
+		const auto core = current_join * half;
+		const auto outer = current_join * (half + fringe_width);
 
-		previous_pos = current_pos;
-		previous_join = current_join;
+		vertices.push_back(vertex{ .pos = to_ndc({ current_pos.x + outer.x, current_pos.y + outer.y }), .col = transparent });
+		vertices.push_back(vertex{ .pos = to_ndc({ current_pos.x + core.x,  current_pos.y + core.y }),  .col = col });
+		vertices.push_back(vertex{ .pos = to_ndc({ current_pos.x - core.x,  current_pos.y - core.y }),  .col = col });
+		vertices.push_back(vertex{ .pos = to_ndc({ current_pos.x - outer.x, current_pos.y - outer.y }), .col = transparent });
 	}
 
-	if (closed) 
+	vector_t<cstd::uint32_t> indices;
+	const cstd::size_t segments = closed ? n : n - 1;
+	indices.reserve(segments * 18);
+
+	for (cstd::size_t i = 0; i < segments; i++) 
 	{
-		draw_segment(previous_pos, previous_join, first_pos, first_join);
+		const cstd::uint32_t idx = static_cast<cstd::uint32_t>(i * 4);
+		const cstd::uint32_t nxt = static_cast<cstd::uint32_t>(((i + 1) % n) * 4);
+
+		indices.push_back(idx); indices.push_back(nxt); indices.push_back(nxt + 1);
+		indices.push_back(idx); indices.push_back(nxt + 1); indices.push_back(idx + 1);
+
+		indices.push_back(idx + 1); indices.push_back(nxt + 1); indices.push_back(nxt + 2);
+		indices.push_back(idx + 1); indices.push_back(nxt + 2); indices.push_back(idx + 2);
+
+		indices.push_back(idx + 2); indices.push_back(nxt + 2); indices.push_back(nxt + 3);
+		indices.push_back(idx + 2); indices.push_back(nxt + 3); indices.push_back(idx + 3);
 	}
+
+	draw_indexed_vertices(vertices, indices);
 
 	path_points_.clear();
 }
 
 void rv::renderer::draw_filled_path(const color col) 
 {
-	if (path_points_.size() <= 1) 
+	if (path_points_.size() <= 2) 
 	{
 		path_points_.clear();
 
 		return;
 	}
 
-	const ndc_position first_point = to_ndc(path_points_[0]);
+	const vector_t<cstd::uint32_t> indices = triangulate::execute(path_points_);
 
-	for (cstd::size_t i = 1; i < path_points_.size() - 1; i++) 
+	if (!indices.empty())
 	{
-		const ndc_position point = to_ndc(path_points_[i]);
-		const ndc_position next_point = to_ndc(path_points_[i + 1]);
+		vector_t<vertex> vertices;
+		vertices.reserve(path_points_.size());
 
-		const array_t<vertex, 3> vertices =
+		for (const position& p : path_points_)
 		{
-			vertex{.pos = first_point, .col = col },
-			vertex{.pos = point, .col = col },
-			vertex{.pos = next_point, .col = col },
-		};
+			vertices.push_back(vertex{ .pos = to_ndc(p), .col = col });
+		}
 
-		draw_vertices(vertices);
+		draw_indexed_vertices(vertices, indices);
 	}
 
 	draw_lined_path(col, 0.f);

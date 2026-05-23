@@ -162,6 +162,16 @@ cstd::int32_t main()
 		renderer->draw_circle_filled(input->mouse_pos(), 25.f, {1.f, 0.f, 1.f, 1.f});
 		renderer->pop_clip_rect();
 
+		// gradient rect
+		renderer->draw_rect_filled_multi_color(
+			{ 1000.f, 100.f }, { 1200.f, 250.f },
+			{ 1.0f, 0.2f, 0.6f, 1.f },
+			{ 1.0f, 0.5f, 0.0f, 1.f },
+			{ 0.0f, 0.8f, 1.0f, 1.f },
+			{ 0.5f, 0.0f, 1.0f, 1.f },
+			20.f
+		);
+
 		// red filled rectangle with a really thick shadow
 		renderer->draw_shadow_rect({ 100.f, 350.f }, { 300.f, 500.f }, { 0.f, 0.f, 0.f, 0.6f }, 17.5f, 10.f, 20.f);
 		renderer->draw_rect_filled({ 100.f, 350.f }, { 300.f, 500.f }, { 1.f, 0.f, 0.f, 1.f }, 17.5f);

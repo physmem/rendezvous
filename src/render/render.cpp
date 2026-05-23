@@ -178,6 +178,11 @@ void rv::renderer::draw_rect(const position min, const position max, const color
 
 void rv::renderer::draw_rect_filled(const position min, const position max, const color col, const float rounding, const rounding_flags flags) noexcept 
 {
+	draw_rect_filled_multi_color(min, max, col, col, col, col, rounding, flags);
+}
+
+void rv::renderer::draw_rect_filled_multi_color(const position min, const position max, const color col_tl, const color col_tr, const color col_br, const color col_bl, const float rounding, const rounding_flags flags) noexcept 
+{
 	const float width = max.x - min.x;
 	const float height = max.y - min.y;
 
@@ -200,19 +205,19 @@ void rv::renderer::draw_rect_filled(const position min, const position max, cons
 
 	const array_t<float, 8> data = { width, height, 0.f, 0.f, rtr, rbr, rbl, rtl };
 
-	const auto make_vertex = [col, data](const float x, const float y, const float u, const float v) -> vertex 
+	const auto make_vertex = [data](const float x, const float y, const color c, const float u, const float v) -> vertex 
 	{
-		return vertex{ .pos = { x, y }, .col = col, .uv = { u, v }, .custom_data = data };
+		return vertex{ .pos = { x, y }, .col = c, .uv = { u, v }, .custom_data = data };
 	};
 
 	const array_t<vertex, 6> vertices =
 	{
-		make_vertex(n0.x, n0.y, -qw, -qh),
-		make_vertex(n1.x, n0.y,  qw, -qh),
-		make_vertex(n0.x, n1.y, -qw,  qh),
-		make_vertex(n1.x, n0.y,  qw, -qh),
-		make_vertex(n1.x, n1.y,  qw,  qh),
-		make_vertex(n0.x, n1.y, -qw,  qh),
+		make_vertex(n0.x, n0.y, col_tl, -qw, -qh),
+		make_vertex(n1.x, n0.y, col_tr,  qw, -qh),
+		make_vertex(n0.x, n1.y, col_bl, -qw,  qh),
+		make_vertex(n1.x, n0.y, col_tr,  qw, -qh),
+		make_vertex(n1.x, n1.y, col_br,  qw,  qh),
+		make_vertex(n0.x, n1.y, col_bl, -qw,  qh),
 	};
 
 	draw_vertices(vertices, shader_type::rect_shader);

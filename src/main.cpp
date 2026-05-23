@@ -158,6 +158,9 @@ cstd::int32_t main()
 
 		// standalone blue shadow rect
 		renderer->draw_shadow_rect({ 700.f, 100.f }, { 900.f, 250.f }, { 0.f, 0.5f, 1.f, 0.8f }, 17.5f, 35.f, 3.f, rv::rounding_flags_all, true);
+		renderer->push_clip_rect({700.f, 100.f}, {900.f, 250.f}, 17.5f, rv::rounding_flags_all);
+		renderer->draw_circle_filled(input->mouse_pos(), 25.f, {1.f, 0.f, 1.f, 1.f});
+		renderer->pop_clip_rect();
 
 		// red filled rectangle with a really thick shadow
 		renderer->draw_shadow_rect({ 100.f, 350.f }, { 300.f, 500.f }, { 0.f, 0.f, 0.f, 0.6f }, 17.5f, 10.f, 20.f);

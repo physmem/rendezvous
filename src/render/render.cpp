@@ -80,9 +80,9 @@ void rv::renderer::begin_frame(const vector_2d<float> display_size) noexcept
 	begin_frame_backend(display_size);
 }
 
-void rv::renderer::push_clip_rect(const position min, const position max) noexcept
+void rv::renderer::push_clip_rect(const position min, const position max, const float rounding, const rounding_flags flags) noexcept
 {
-	clip_rects_.push_back({ min, max });
+	clip_rects_.push_back({ { min, max }, rounding, flags });
 }
 
 void rv::renderer::pop_clip_rect() noexcept
@@ -100,7 +100,7 @@ void rv::renderer::draw_vertices(const span_t<const vertex> vertices, const shad
 		return;
 	}
 
-	const optional_t<rect> current_clip = clip_rects_.empty() ? optional_t<rect>() : clip_rects_.back();
+	const optional_t<clip_rect_data> current_clip = clip_rects_.empty() ? optional_t<clip_rect_data>() : clip_rects_.back();
 
 	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture || 
 		pending_batches_.back().shader != shader || pending_batches_.back().clip_rect != current_clip) {
@@ -129,7 +129,7 @@ void rv::renderer::draw_indexed_vertices(const span_t<const vertex> vertices, co
 		return;
 	}
 
-	const optional_t<rect> current_clip = clip_rects_.empty() ? optional_t<rect>() : clip_rects_.back();
+	const optional_t<clip_rect_data> current_clip = clip_rects_.empty() ? optional_t<clip_rect_data>() : clip_rects_.back();
 
 	if (pending_batches_.empty() || current_texture_ != pending_batches_.back().texture || 
 		pending_batches_.back().shader != shader || pending_batches_.back().clip_rect != current_clip) 

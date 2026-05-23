@@ -407,44 +407,83 @@ void rv::renderer::draw_text(const font& font, const position pos, const string_
 	const float scale = size != 0.f ? size / font.baked_size() : 1.f;
 	const float baseline = pos.y + font.ascent() * scale;
 	float pen = pos.x;
+	float line_y = baseline;
 
 	const char* s = text.data();
 	const char* end = s + text.size();
 
+	vector_t<vertex> vertices;
+	vector_t<cstd::uint32_t> indices;
+
+	vertices.reserve(text.size() * 4);
+	indices.reserve(text.size() * 6);
+
+	cstd::uint32_t prev_codepoint = 0;
+
 	while (s < end) 
 	{
 		const cstd::uint32_t codepoint = decode_utf8(s, end);
+
+		// handle newlines
+		if (codepoint == '\n')
+		{
+			pen = pos.x;
+			line_y += font.line_height() * scale;
+			prev_codepoint = 0;
+			continue;
+		}
+
+		if (codepoint == '\r')
+		{
+			prev_codepoint = 0;
+			continue;
+		}
+
+		// apply kerning
+		if (prev_codepoint != 0)
+		{
+			pen += font.kerning(prev_codepoint, codepoint) * scale;
+		}
+
 		const glyph& g = font.glyph(codepoint);
 
 		if (g.size.x > 0.f && g.size.y > 0.f) 
 		{
-			const float x0 = pen + g.bearing.x * scale;
-			const float y0 = baseline - g.bearing.y * scale;
+			const float x0 = cstd::roundf(pen + g.bearing.x * scale);
+			const float y0 = cstd::roundf(line_y - g.bearing.y * scale);
+			const float w = cstd::roundf(g.size.x * scale);
+			const float h = cstd::roundf(g.size.y * scale);
+			
 			const ndc_position a = to_ndc({ x0, y0 });
-			const ndc_position b = to_ndc({ x0 + g.size.x * scale, y0 + g.size.y * scale });
+			const ndc_position b = to_ndc({ x0 + w, y0 + h });
 
-			const auto make_vertex = [col](const float x, const float y, const float u, const float w) -> vertex 
-			{
-				return vertex{ .pos = { x, y }, .col = col, .uv = { u, w } };
-			};
+			const cstd::uint32_t base = static_cast<cstd::uint32_t>(vertices.size());
 
-			const array_t<vertex, 6> vertices =
-			{
-				make_vertex(a.x, a.y, g.uv0.x, g.uv0.y),
-				make_vertex(b.x, a.y, g.uv1.x, g.uv0.y),
-				make_vertex(a.x, b.y, g.uv0.x, g.uv1.y),
-				make_vertex(b.x, a.y, g.uv1.x, g.uv0.y),
-				make_vertex(b.x, b.y, g.uv1.x, g.uv1.y),
-				make_vertex(a.x, b.y, g.uv0.x, g.uv1.y),
-			};
-			draw_vertices(vertices);
+			vertices.push_back(vertex{ .pos = { a.x, a.y }, .col = col, .uv = { g.uv0.x, g.uv0.y } });
+			vertices.push_back(vertex{ .pos = { b.x, a.y }, .col = col, .uv = { g.uv1.x, g.uv0.y } });
+			vertices.push_back(vertex{ .pos = { b.x, b.y }, .col = col, .uv = { g.uv1.x, g.uv1.y } });
+			vertices.push_back(vertex{ .pos = { a.x, b.y }, .col = col, .uv = { g.uv0.x, g.uv1.y } });
+
+			indices.push_back(base);
+			indices.push_back(base + 1);
+			indices.push_back(base + 2);
+			indices.push_back(base);
+			indices.push_back(base + 2);
+			indices.push_back(base + 3);
 		}
 
 		pen += g.advance * scale;
+		prev_codepoint = codepoint;
+	}
+
+	if (!vertices.empty())
+	{
+		draw_indexed_vertices(vertices, indices);
 	}
 
 	current_texture_ = default_texture_;
 }
+
 
 rv::position rv::renderer::calc_text_size(const font& font, const string_view_t text, const float size) const noexcept 
 {
@@ -454,23 +493,53 @@ rv::position rv::renderer::calc_text_size(const font& font, const string_view_t 
 	}
 
 	const float scale = size != 0.f ? size / font.baked_size() : 1.f;
-	float width = 0.f;
+	float max_width = 0.f;
+	float current_width = 0.f;
+	cstd::size_t lines = 1;
 
 	const char* s = text.data();
 	const char* end = s + text.size();
 
+	cstd::uint32_t prev_codepoint = 0;
+
 	while (s < end) 
 	{
 		const cstd::uint32_t codepoint = decode_utf8(s, end);
+
+		if (codepoint == '\n')
+		{
+			max_width = cstd::fmaxf(max_width, current_width);
+			current_width = 0.f;
+			lines++;
+			prev_codepoint = 0;
+			continue;
+		}
+
+		if (codepoint == '\r')
+		{
+			prev_codepoint = 0;
+			continue;
+		}
+
+		if (prev_codepoint != 0)
+		{
+			current_width += font.kerning(prev_codepoint, codepoint) * scale;
+		}
+
 		const glyph& g = font.glyph(codepoint);
-		width += g.advance * scale;
+		current_width += g.advance * scale;
+		prev_codepoint = codepoint;
 	}
 
-	return { width, font.baked_size() * scale };
+	max_width = cstd::fmaxf(max_width, current_width);
+
+	return { max_width, static_cast<float>(lines) * font.line_height() * scale };
 }
 
 optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> bytes, const float pixel_height, const cstd::uint32_t min_char, const cstd::uint32_t max_char, const bool anti_aliased) 
 {
+	constexpr cstd::uint32_t glyph_padding = 2;
+
 #ifdef RV_USE_FREETYPE
 	FT_Library library = nullptr;
 
@@ -490,82 +559,131 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 
 	FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(pixel_height));
 
-	cstd::int32_t ascent = static_cast<cstd::int32_t>(face->size->metrics.ascender >> 6);
-	cstd::int32_t line_gap = static_cast<cstd::int32_t>((face->size->metrics.height - face->size->metrics.ascender + face->size->metrics.descender) >> 6);
-
-	const float estimated_area = static_cast<float>(max_char - min_char + 1) * pixel_height * pixel_height * 1.5f;
-	cstd::uint32_t width = 512;
-	cstd::uint32_t height = 512;
-	while (static_cast<float>(width * height) < estimated_area) 
-	{
-		width *= 2;
-		height *= 2;
-	}
-
-	vector_t<cstd::uint8_t> coverage(static_cast<cstd::size_t>(width) * height, 0);
+	const float ft_ascent = static_cast<float>(face->size->metrics.ascender >> 6);
+	const float ft_descent = static_cast<float>(face->size->metrics.descender >> 6);
+	const float ft_line_gap = static_cast<float>((face->size->metrics.height - face->size->metrics.ascender + face->size->metrics.descender) >> 6);
+	const float ft_line_height = static_cast<float>(face->size->metrics.height >> 6);
 
 	const cstd::size_t glyph_count = static_cast<cstd::size_t>(max_char - min_char + 1);
 	vector_t<glyph> glyphs(glyph_count);
 
-	cstd::uint32_t pen_x = 0;
-	cstd::uint32_t pen_y = 0;
-	cstd::uint32_t row_height = 0;
+	const cstd::int32_t load_flags = anti_aliased ? (FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT) : (FT_LOAD_RENDER | FT_LOAD_TARGET_MONO | FT_LOAD_MONOCHROME);
 
-	for (cstd::size_t i = 0; i < glyph_count; i++) 
+	cstd::uint32_t width = 256;
+	cstd::uint32_t height = 256;
+	vector_t<cstd::uint8_t> coverage;
+	bool atlas_ok = false;
+
+	while (!atlas_ok && width <= 8192)
 	{
-		const cstd::uint32_t c = min_char + static_cast<cstd::uint32_t>(i);
+		coverage.assign(static_cast<cstd::size_t>(width) * height, 0);
 
-		const cstd::int32_t load_flags = anti_aliased ? FT_LOAD_RENDER : (FT_LOAD_RENDER | FT_LOAD_TARGET_MONO);
-		if (FT_Load_Char(face, c, load_flags)) 
+		cstd::uint32_t pen_x = glyph_padding;
+		cstd::uint32_t pen_y = glyph_padding;
+		cstd::uint32_t row_height = 0;
+		bool overflow = false;
+
+		for (cstd::size_t i = 0; i < glyph_count; i++) 
 		{
-			continue;
-		}
+			const cstd::uint32_t c = min_char + static_cast<cstd::uint32_t>(i);
 
-		FT_Bitmap* bitmap = &face->glyph->bitmap;
-
-		if (pen_x + bitmap->width >= width) 
-		{
-			pen_x = 0;
-			pen_y += row_height + 1;
-			row_height = 0;
-		}
-
-		if (bitmap->rows > row_height) 
-		{
-			row_height = bitmap->rows;
-		}
-
-		if (pen_y + bitmap->rows >= height) 
-		{
-			break;
-		}
-
-		for (cstd::uint32_t row = 0; row < bitmap->rows; row++) 
-		{
-			for (cstd::uint32_t col = 0; col < bitmap->width; col++) 
+			if (FT_Load_Char(face, c, load_flags)) 
 			{
-				if (bitmap->pixel_mode == FT_PIXEL_MODE_MONO)
+				continue;
+			}
+
+			FT_Bitmap* bitmap = &face->glyph->bitmap;
+
+			if (pen_x + bitmap->width + glyph_padding > width) 
+			{
+				pen_x = glyph_padding;
+				pen_y += row_height + glyph_padding;
+				row_height = 0;
+			}
+
+			if (bitmap->rows > row_height) 
+			{
+				row_height = bitmap->rows;
+			}
+
+			if (pen_y + bitmap->rows + glyph_padding > height) 
+			{
+				overflow = true;
+				break;
+			}
+
+			for (cstd::uint32_t row = 0; row < bitmap->rows; row++) 
+			{
+				for (cstd::uint32_t col = 0; col < bitmap->width; col++) 
 				{
-					const cstd::uint8_t byte = bitmap->buffer[row * bitmap->pitch + (col / 8)];
-					const bool bit = (byte & (1 << (7 - (col % 8)))) != 0;
-					coverage[(pen_y + row) * width + (pen_x + col)] = bit ? 0xFF : 0;
+					if (bitmap->pixel_mode == FT_PIXEL_MODE_MONO)
+					{
+						const cstd::uint8_t byte = bitmap->buffer[row * bitmap->pitch + (col / 8)];
+						const bool bit = (byte & (1 << (7 - (col % 8)))) != 0;
+						coverage[(pen_y + row) * width + (pen_x + col)] = bit ? 0xFF : 0;
+					}
+					else
+					{
+						coverage[(pen_y + row) * width + (pen_x + col)] = bitmap->buffer[row * bitmap->pitch + col];
+					}
 				}
-				else
+			}
+
+			glyph& g = glyphs[i];
+
+			g.uv0 = { static_cast<float>(pen_x) / static_cast<float>(width), static_cast<float>(pen_y) / static_cast<float>(height) };
+			g.uv1 = { static_cast<float>(pen_x + bitmap->width) / static_cast<float>(width), static_cast<float>(pen_y + bitmap->rows) / static_cast<float>(height) };
+			g.size = { static_cast<float>(bitmap->width), static_cast<float>(bitmap->rows) };
+			g.bearing = { static_cast<float>(face->glyph->bitmap_left), static_cast<float>(face->glyph->bitmap_top) };
+			g.advance = static_cast<float>(face->glyph->advance.x >> 6);
+
+			pen_x += bitmap->width + glyph_padding;
+		}
+
+		if (!overflow)
+		{
+			atlas_ok = true;
+		}
+		else
+		{
+			width *= 2;
+			height *= 2;
+			// reset glyphs for re-rasterization
+			for (auto& g : glyphs) { g = {}; }
+		}
+	}
+
+	if (!atlas_ok)
+	{
+		FT_Done_Face(face);
+		FT_Done_FreeType(library);
+		return { };
+	}
+
+	unordered_map_t<cstd::uint64_t, float> kerning_table;
+
+	if (FT_HAS_KERNING(face))
+	{
+		for (cstd::uint32_t left = min_char; left <= max_char; left++)
+		{
+			const FT_UInt left_idx = FT_Get_Char_Index(face, left);
+			if (!left_idx) continue;
+
+			for (cstd::uint32_t right = min_char; right <= max_char; right++)
+			{
+				const FT_UInt right_idx = FT_Get_Char_Index(face, right);
+				if (!right_idx) continue;
+
+				FT_Vector delta = { };
+				FT_Get_Kerning(face, left_idx, right_idx, FT_KERNING_DEFAULT, &delta);
+
+				if (delta.x != 0)
 				{
-					coverage[(pen_y + row) * width + (pen_x + col)] = bitmap->buffer[row * bitmap->pitch + col];
+					const cstd::uint64_t key = (static_cast<cstd::uint64_t>(left) << 32) | static_cast<cstd::uint64_t>(right);
+					kerning_table[key] = static_cast<float>(delta.x >> 6);
 				}
 			}
 		}
-
-		glyph& g = glyphs[i];
-
-		g.uv0 = { static_cast<float>(pen_x) / width, static_cast<float>(pen_y) / height };
-		g.uv1 = { static_cast<float>(pen_x + bitmap->width) / width, static_cast<float>(pen_y + bitmap->rows) / height };
-		g.size = { static_cast<float>(bitmap->width), static_cast<float>(bitmap->rows) };
-		g.bearing = { static_cast<float>(face->glyph->bitmap_left), static_cast<float>(face->glyph->bitmap_top) };
-		g.advance = static_cast<float>(face->glyph->advance.x >> 6);
-
-		pen_x += bitmap->width + 1;
 	}
 
 	vector_t<cstd::uint8_t> rgba(static_cast<cstd::size_t>(width) * height * 4, 0);
@@ -590,7 +708,7 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 		return { };
 	}
 
-	return font{ texture, glyphs, min_char, max_char, pixel_height, static_cast<float>(ascent), static_cast<float>(line_gap) };
+	return font{ texture, glyphs, min_char, max_char, pixel_height, ft_ascent, ft_descent, ft_line_height, ft_line_gap, cstd::move(kerning_table) };
 #else
 	stbtt_fontinfo info = { };
 
@@ -601,28 +719,62 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 
 	const float scale = stbtt_ScaleForPixelHeight(&info, pixel_height);
 
-	cstd::int32_t ascent = 0;
-	cstd::int32_t descent = 0;
-	cstd::int32_t line_gap = 0;
+	cstd::int32_t raw_ascent = 0;
+	cstd::int32_t raw_descent = 0;
+	cstd::int32_t raw_line_gap = 0;
 
-	stbtt_GetFontVMetrics(&info, &ascent, &descent, &line_gap);
+	stbtt_GetFontVMetrics(&info, &raw_ascent, &raw_descent, &raw_line_gap);
 
-	const float estimated_area = static_cast<float>(max_char - min_char + 1) * pixel_height * pixel_height * 1.5f;
-	cstd::uint32_t width = 512;
-	cstd::uint32_t height = 512;
-	while (static_cast<float>(width * height) < estimated_area) 
-	{
-		width *= 2;
-		height *= 2;
-	}
-
-	vector_t<cstd::uint8_t> coverage(static_cast<cstd::size_t>(width) * height, 0);
+	const float stb_ascent = static_cast<float>(raw_ascent) * scale;
+	const float stb_descent = static_cast<float>(raw_descent) * scale;
+	const float stb_line_gap = static_cast<float>(raw_line_gap) * scale;
+	const float stb_line_height = stb_ascent - stb_descent + stb_line_gap;
 
 	const cstd::size_t glyph_count = static_cast<cstd::size_t>(max_char - min_char + 1);
-	vector_t<stbtt_bakedchar> baked(glyph_count);
+	cstd::uint32_t width = 256;
+	cstd::uint32_t height = 256;
+	vector_t<cstd::uint8_t> coverage;
+	vector_t<stbtt_packedchar> packed_chars(glyph_count);
+	bool atlas_ok = false;
 
-	const int baked_count = stbtt_BakeFontBitmap(bytes.data(), 0, pixel_height, coverage.data(), width, height, static_cast<int>(min_char), static_cast<int>(glyph_count), baked.data());
-	if (baked_count <= 0)
+	const cstd::uint32_t oversample = anti_aliased ? 2 : 1;
+
+	while (!atlas_ok && width <= 8192)
+	{
+		coverage.assign(static_cast<cstd::size_t>(width) * height, 0);
+
+		stbtt_pack_context pack_ctx = { };
+
+		if (!stbtt_PackBegin(&pack_ctx, coverage.data(), static_cast<int>(width), static_cast<int>(height), 0, static_cast<int>(glyph_padding), nullptr))
+		{
+			width *= 2;
+			height *= 2;
+			continue;
+		}
+
+		stbtt_PackSetOversampling(&pack_ctx, oversample, oversample);
+
+		stbtt_pack_range range = { };
+		range.font_size = pixel_height;
+		range.first_unicode_codepoint_in_range = static_cast<int>(min_char);
+		range.num_chars = static_cast<int>(glyph_count);
+		range.chardata_for_range = packed_chars.data();
+
+		const int pack_result = stbtt_PackFontRanges(&pack_ctx, bytes.data(), 0, &range, 1);
+		stbtt_PackEnd(&pack_ctx);
+
+		if (pack_result)
+		{
+			atlas_ok = true;
+		}
+		else
+		{
+			width *= 2;
+			height *= 2;
+		}
+	}
+
+	if (!atlas_ok)
 	{
 		return { };
 	}
@@ -637,7 +789,8 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 
 	vector_t<cstd::uint8_t> rgba(static_cast<cstd::size_t>(width) * height * 4, 0);
 
-	for (cstd::size_t i = 0; i < coverage.size(); i++) {
+	for (cstd::size_t i = 0; i < coverage.size(); i++) 
+	{
 		const cstd::size_t c = i * 4;
 
 		rgba[c] = 0xFF;
@@ -657,17 +810,38 @@ optional_t<rv::font> rv::renderer::add_font(const span_t<const cstd::uint8_t> by
 
 	for (cstd::size_t i = 0; i < glyph_count; i++) 
 	{
-		const stbtt_bakedchar& b = baked[i];
+		const stbtt_packedchar& pc = packed_chars[i];
 		glyph& g = glyphs[i];
 
-		g.uv0 = { static_cast<float>(b.x0) / width, static_cast<float>(b.y0) / height };
-		g.uv1 = { static_cast<float>(b.x1) / width, static_cast<float>(b.y1) / height };
-		g.size = { static_cast<float>(b.x1 - b.x0), static_cast<float>(b.y1 - b.y0) };
-		g.bearing = { b.xoff, -b.yoff };
-		g.advance = b.xadvance;
+		g.uv0 = { static_cast<float>(pc.x0) / static_cast<float>(width), static_cast<float>(pc.y0) / static_cast<float>(height) };
+		g.uv1 = { static_cast<float>(pc.x1) / static_cast<float>(width), static_cast<float>(pc.y1) / static_cast<float>(height) };
+		g.size = { pc.xoff2 - pc.xoff, pc.yoff2 - pc.yoff };
+		g.bearing = { pc.xoff, -pc.yoff };
+		g.advance = pc.xadvance;
 	}
 
-	return font{ texture, glyphs, min_char, max_char, pixel_height, static_cast<float>(ascent) * scale, static_cast<float>(line_gap) * scale };
+	unordered_map_t<cstd::uint64_t, float> kerning_table;
+
+	for (cstd::uint32_t left = min_char; left <= max_char; left++)
+	{
+		const int left_glyph = stbtt_FindGlyphIndex(&info, static_cast<int>(left));
+		if (!left_glyph) continue;
+
+		for (cstd::uint32_t right = min_char; right <= max_char; right++)
+		{
+			const int right_glyph = stbtt_FindGlyphIndex(&info, static_cast<int>(right));
+			if (!right_glyph) continue;
+
+			const int kern = stbtt_GetGlyphKernAdvance(&info, left_glyph, right_glyph);
+			if (kern != 0)
+			{
+				const cstd::uint64_t key = (static_cast<cstd::uint64_t>(left) << 32) | static_cast<cstd::uint64_t>(right);
+				kerning_table[key] = static_cast<float>(kern) * scale;
+			}
+		}
+	}
+
+	return font{ texture, glyphs, min_char, max_char, pixel_height, stb_ascent, stb_descent, stb_line_height, stb_line_gap, cstd::move(kerning_table) };
 #endif
 }
 

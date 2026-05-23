@@ -10,6 +10,7 @@
 #include <optional>
 #include <span>
 #include <chrono>
+#include <unordered_map>
 
 namespace cstd
 {
@@ -43,6 +44,9 @@ using unique_ptr_t = std::unique_ptr<T>;
 
 template <class T>
 using optional_t = std::optional<T>;
+
+template <class K, class V>
+using unordered_map_t = std::unordered_map<K, V>;
 
 template <class T>
 using istreambuf_iterator_t = std::istreambuf_iterator<T>;
@@ -91,6 +95,16 @@ namespace cstd
 	inline float fmaxf(const float x, const float y)
 	{
 		return std::fmaxf(x, y);
+	}
+
+	inline float floorf(const float x)
+	{
+		return std::floorf(x);
+	}
+
+	inline float roundf(const float x)
+	{
+		return std::roundf(x);
 	}
 
 	template <class T, class ...Args>
